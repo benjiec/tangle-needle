@@ -13,7 +13,7 @@ Download the following profiles
 
   * KEGG KO profile HMMs: `https://www.genome.jp/ftp/db/kofam/profiles.tar.gz`
     * Then concatenate all the profiles together: `cat profiles/*.hmm > ko.hmm`
-    * Run `hmmpress ko.hmm`
+    * Run `hmmfetch --index ko.hmm`
 
 Put these files in the same directory then set the following environment variable
 
@@ -37,8 +37,8 @@ are synced to Google Cloud storage, into a bucket.
 ## Protein Detection from HMM Profiles
 
 Run these two commands to search for proteins matching HMM profile in a genomic
-FASTA file. Note, the second command speeds up significantly with `.h3i` file
-generated from `hmmpress`.
+FASTA file. Note, the second command speeds up significantly with `.ssi` file
+generated from `hmmfetch --index`.
 
 ```
 python3 scripts/hmmsearch-genome.py \

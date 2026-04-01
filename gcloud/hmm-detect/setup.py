@@ -19,7 +19,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--genome-accession", required=True)
     ap.add_argument("query_fna")
-    ap.add_argument("--entries-per-task", type=int, default=100)
+    ap.add_argument("--entries-per-task", type=int, default=50)
     ap.add_argument("--parallelism", type=int, default=45)
     ap.add_argument("--run-dir-parent", default=".")
     args = ap.parse_args()

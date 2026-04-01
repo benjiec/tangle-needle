@@ -1,5 +1,3 @@
-# This job requires more expensive SSD VMs, because hmmfetch requires random
-# disk access.
 
 # Copy prep scripts to bucket
 

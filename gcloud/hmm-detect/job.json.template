@@ -85,7 +85,7 @@
       {
         "installGpuDrivers": false,
         "policy": {
-          "machineType": "c3-standard-4-lssd",
+          "machineType": "n2-standard-4",
           "provisioningModel": "SPOT"
         }
       }
