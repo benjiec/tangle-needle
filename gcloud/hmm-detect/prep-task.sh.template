@@ -1,0 +1,15 @@
+#!/bin/bash
+set -e  # Exit immediately if any command fails
+
+WORKSPACE="/data"
+
+# Clean up any previous task inputs and outputs
+rm -f $WORKSPACE/input_*.faa
+rm -f $WORKSPACE/detected_*.tsv
+rm -f $WORKSPACE/output_*.tsv
+rm -f $WORKSPACE/output_*.faa
+
+echo "Downloading input FASTA for task ${BATCH_TASK_INDEX}..."
+gsutil -o "GSUtil:check_hashes=never" cp \
+  "${GC_INPUT_PATH_PRE_INDEX}${BATCH_TASK_INDEX}" \
+  "$WORKSPACE/input_${BATCH_TASK_INDEX}.fna"

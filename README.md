@@ -14,8 +14,6 @@ Download the following profiles
   * KEGG KO profile HMMs: `https://www.genome.jp/ftp/db/kofam/profiles.tar.gz`
     * Then concatenate all the profiles together: `cat profiles/*.hmm > ko.hmm`
     * Run `hmmpress ko.hmm`
-    * Also create `ko_thresholds.tsv` from KEGG FTP site `https://www.genome.jp/ftp/db/kofam/ko_list.gz`
-      * Filter away rows without a threshold, using `grep -v "\-\t\-" ko_thresholds.txt`
 
 Put these files in the same directory then set the following environment variable
 
@@ -38,7 +36,9 @@ are synced to Google Cloud storage, into a bucket.
 
 ## Protein Detection from HMM Profiles
 
-Run these two commands to search for proteins matching HMM profile in a genomic FASTA file
+Run these two commands to search for proteins matching HMM profile in a genomic
+FASTA file. Note, the second command speeds up significantly with `.h3i` file
+generated from `hmmpress`.
 
 ```
 python3 scripts/hmmsearch-genome.py \
@@ -52,3 +52,14 @@ python3 scripts/export-protein-results.py \
 The final outputs are two files: a TSV file that enumerates the fragments on
 the contigs (this is like a GFF, in the tangle DetectedTable format), and a
 protein FASTA file.
+
+To prepare and submit this job to run on Google Cloud, use the following script
+to create a run directory under `runs` (or whatever value for `--run-dir`), and
+then follow instructions in the README file in that run directory.
+
+```
+PYTHPATH=. python3 gcloud/hmm-detect/setup.py \
+  --genome-accession GCF_002042975.1 \
+  --run-dir=runs \
+  ncbi-downloads/ncbi_dataset/data/GCF_002042975.1/GCF_002042975.1_ofav_dov_v1_genomic.fna
+```

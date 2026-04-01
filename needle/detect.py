@@ -145,7 +145,7 @@ class Results:
         ]
         missing = [key for key in required if mapping.get(key) is None]
         if missing:
-            raise ValueError(f"Missing required columns in results TSV: {', '.join(missing)}")
+            raise ValueError(f"Missing required columns in results TSV: {', '.join(missing)} in {self._results_tsv_path}")
 
         # Convert Optional[int] to int where present
         return {k: v for k, v in mapping.items() if v is not None}

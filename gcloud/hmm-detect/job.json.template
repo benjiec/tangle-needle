@@ -1,0 +1,102 @@
+{
+  "taskGroups": [
+    {
+      "taskCount": ${NTASKS},
+      "parallelism": ${PARALLELISM},
+      "taskCountPerNode": 1,
+      "taskSpec": {
+        "computeResource": {
+          "cpuMilli": 4000,
+          "memoryMib": 12000
+        },
+        "maxRetryCount": 5,
+        "runnables": [
+          {
+            "displayName": "General Prep",
+            "script": {
+              "text": "gsutil cp ${GC_RUN_DIR}/prep-general.sh ./prep-general.sh && bash ./prep-general.sh"
+            }
+          },
+          {
+            "displayName": "Task Specific Prep",
+            "script": {
+              "text": "gsutil cp ${GC_RUN_DIR}/prep-task.sh ./prep-task_${BATCH_TASK_INDEX}.sh && bash ./prep-task_${BATCH_TASK_INDEX}.sh"
+            }
+          },
+          {
+            "displayName": "HMM detection",
+            "container": {
+              "imageUri": "us-east1-docker.pkg.dev/needle-489321/tangle-docker/needle:latest",
+              "commands": [
+                "/bin/bash",
+                "-c",
+                "python3 scripts/hmmsearch-genome.py --cpus 4 /data/ko.hmm /data/input_${BATCH_TASK_INDEX}.fna /data/detected_${BATCH_TASK_INDEX}.tsv"
+              ],
+              "volumes": [
+                "/data:/data" 
+              ]
+            },
+            "environment": {
+              "variables": {
+                "HMM_DB_DIR": "/data/"
+              }
+            }
+          },
+          {
+            "displayName": "Export results",
+            "container": {
+              "imageUri": "us-east1-docker.pkg.dev/needle-489321/tangle-docker/needle:latest",
+              "commands": [
+                "/bin/bash",
+                "-c",
+                "python3 scripts/export-protein-results.py --query-database-name ${GENOME_ACCESSION} /data/ko.hmm /data/input_${BATCH_TASK_INDEX}.fna /data/detected_${BATCH_TASK_INDEX}.tsv /data/output_${BATCH_TASK_INDEX}.tsv /data/output_${BATCH_TASK_INDEX}.faa"
+              ],
+              "volumes": [
+                "/data:/data" 
+              ]
+            },
+            "environment": {
+              "variables": {
+                "HMM_DB_DIR": "/data/"
+              }
+            }
+          },
+          {
+            "displayName": "Upload Results",
+            "script": {
+              "text": "ls -l /data/ && gsutil cp /data/output_${BATCH_TASK_INDEX}.* ${GC_RUN_OUTPUT_DIR}/"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "allocationPolicy": {
+    "network": {
+      "networkInterfaces": [
+        {
+          "network": "projects/needle-489321/global/networks/default",
+          "subnetwork": "projects/needle-489321/regions/us-east1/subnetworks/default",
+          "noExternalIpAddress": true
+        }
+      ]
+    },
+    "instances": [
+      {
+        "installGpuDrivers": false,
+        "policy": {
+          "machineType": "c3-standard-4-lssd",
+          "provisioningModel": "SPOT"
+        }
+      }
+    ],
+    "location": {
+      "allowedLocations": [
+        "regions/us-east1"
+      ]
+    }
+  },
+  "logsPolicy": {
+    "destination": "CLOUD_LOGGING"
+  }
+}

@@ -1,0 +1,30 @@
+# This job requires more expensive SSD VMs, because hmmfetch requires random
+# disk access.
+
+# Copy prep scripts to bucket
+
+gcloud storage cp prep-general.sh ${GC_RUN_DIR}/
+gcloud storage cp prep-task.sh ${GC_RUN_DIR}/
+
+# Copy inputs to bucket
+
+gcloud storage cp ${HOST_RUN_INPUT_REL_PATH}/* ${GC_RUN_INPUT_DIR}/
+
+# Submit job
+
+gcloud batch jobs submit hmm-detect-${BATCH_NAME} --config job.json --location us-east1
+
+# Review job progress
+
+gcloud batch jobs describe hmm-detect-${BATCH_NAME} --location us-east1 | head -40
+
+# Retrieve outouts
+
+gsutil cat ${GC_RUN_OUTPUT_DIR}/output_\*.tsv > protein_fragments_all.tsv
+gsutil cat ${GC_RUN_OUTPUT_DIR}/output_\*.faa > proteins.faa
+{ head -1 protein_fragments_all.tsv; grep -v query_database protein_fragments_all.tsv; } > protein_fragments.tsv
+rm protein_fragments_all.tsv
+
+# Delete job in case you need to resubmit
+
+gcloud batch jobs delete hmm-detect-${BATCH_NAME} --location us-east1

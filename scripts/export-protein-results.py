@@ -9,8 +9,8 @@ from needle.hmm import HMMCollection
 def main():
     parser = argparse.ArgumentParser(description="Export protein matches from detection results TSV.")
     parser.add_argument("hmm_file", help="HMM file to use for improve search results")
-    parser.add_argument("hmm_search_results_tsv")
     parser.add_argument("fna_file")
+    parser.add_argument("hmm_search_results_tsv")
     parser.add_argument("output_tsv_fn")
     parser.add_argument("output_faa_fn")
     parser.add_argument("--query-database-name", required=True)

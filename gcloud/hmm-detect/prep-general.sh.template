@@ -1,0 +1,25 @@
+#!/bin/bash
+set -e  # Exit immediately if any command fails
+
+HMM_FILE="$WORKSPACE/ko.hmm"
+
+SSD_PATH="/dev/disk/by-id/google-local-nvme-ssd-0"
+WORKSPACE="/data"
+
+if mountpoint -q "$WORKSPACE"; then
+  echo "SSD already mounted. Skipping format."
+else
+  echo "Formatting and mounting Local SSD..."
+  mkfs.ext4 -F "$SSD_PATH"
+  mkdir -p "$WORKSPACE"
+  mount "$SSD_PATH" "$WORKSPACE"
+  chmod 777 "$WORKSPACE"
+fi
+
+if [ ! -f "$HMM_FILE" ]; then
+  echo "HMM file missing. Downloading from GCS..."
+  gsutil -m -o "GSUtil:check_hashes=never" cp ${GC_HMM_PATH}/ko.hmm "$WORKSPACE/"
+  gsutil -m -o "GSUtil:check_hashes=never" cp ${GC_HMM_PATH}/ko.hmm.h3i "$WORKSPACE/"
+else
+  echo "HMM file already exists. Skipping download."
+fi
