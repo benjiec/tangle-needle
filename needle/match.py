@@ -6,6 +6,8 @@ import itertools
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 from Bio.Seq import Seq
+from tangle.detected import DetectedTable
+from tangle import unique_batch
 
 MAX_AA_OVERLAP_GROUPING = 15
 
@@ -410,64 +412,28 @@ def write_fasta_record(f, pm: ProteinHit) -> None:
     f.write(seq + "\n")
 
 
-class ProteinsTSV(object):
+def match_to_detected_row(protein_hit_id, match, genome_accession, batch):
+    return dict(
+        detection_type="sequence",
+        detection_method="hmm",
+        batch=batch,
+        query_database=genome_accession,
+        query_type="contig",
+        query_accession=match.target_accession,
+        target_database=genome_accession,
+        target_type="protein",
+        target_accession=protein_hit_id,
+        query_start=match.target_start,
+        query_end=match.target_end,
+        target_start=match.query_start,
+        target_end=match.query_end
+    )
 
-    HEADERS = [
-        "protein_hit_id",
-        "genome_accession",
-        "target_accession",
-        "target_start",
-        "target_end",
-        "query_accession",
-        "query_start",
-        "query_end",
-        "matched_sequence"
-    ]
 
-    @staticmethod
-    def match_dict(protein_hit_id, genome_accession, match):
-        return {
-            ProteinsTSV.HEADERS[0]: protein_hit_id,
-            ProteinsTSV.HEADERS[1]: genome_accession,
-            ProteinsTSV.HEADERS[2]: match.target_accession,
-            ProteinsTSV.HEADERS[3]: match.target_start,
-            ProteinsTSV.HEADERS[4]: match.target_end,
-            ProteinsTSV.HEADERS[5]: match.query_accession,
-            ProteinsTSV.HEADERS[6]: match.query_start,
-            ProteinsTSV.HEADERS[7]: match.query_end,
-            ProteinsTSV.HEADERS[8]: match.target_sequence_translated()
-        }
-            
-    @staticmethod
-    def write_protein_hit(writer, pm: ProteinHit, genome_accession: str) -> None:
-        for m in pm.matches:
-            writer.writerow(ProteinsTSV.match_dict(pm.protein_hit_id, genome_accession, m))
-
-    @staticmethod
-    def append_to_tsv(tsv_path, protein_hits, genome_accession):
-        if not os.path.exists(tsv_path):
-            with open(tsv_path, "w") as f:
-                writer = csv.DictWriter(f, fieldnames=ProteinsTSV.HEADERS, delimiter='\t')
-                writer.writeheader()
-
-        with open(tsv_path, "a") as f:
-            writer = csv.DictWriter(f, fieldnames=ProteinsTSV.HEADERS, delimiter='\t')
-            for pm in protein_hits:
-                ProteinsTSV.write_protein_hit(writer, pm, genome_accession)
-
-    @staticmethod
-    def from_tsv_to_rows(tsv_path):
-        rows = []
-        with open(tsv_path, "r") as f:
-            reader = csv.DictReader(f, delimiter='\t')
-            for row in reader:
-                row = {k: row[k] for k in ProteinsTSV.HEADERS}
-                row["query_start"] = int(row["query_start"])
-                row["query_end"] = int(row["query_end"])
-                row["target_start"] = int(row["target_start"])
-                row["target_end"] = int(row["target_end"])
-                rows.append(row)
-        return rows
+def append_to_tsv(tsv_path, protein_hits, genome_accession):
+    batch = unique_batch()
+    rows = [match_to_detected_row(hit.protein_hit_id, m, genome_accession, batch) for hit in protein_hits for m in hit.matches]
+    DetectedTable.write_tsv(tsv_path, rows, append = True)
 
 
 def export_protein_hits(
@@ -483,4 +449,4 @@ def export_protein_hits(
         for pm in protein_hits:
             write_fasta_record(f_prot, pm)
 
-    ProteinsTSV.append_to_tsv(proteins_tsv_path, protein_hits, genome_accession)
+    append_to_tsv(proteins_tsv_path, protein_hits, genome_accession)

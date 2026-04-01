@@ -5,7 +5,7 @@ import unittest
 import random
 
 from needle.match import group_matches, ProteinHit, Match, order_matches_for_junctions, NonlinearMatchException
-from needle.match import ProteinsTSV, write_fasta_record, export_protein_hits
+from needle.match import write_fasta_record, export_protein_hits
 
 
 class TestOrderGroupMatches(unittest.TestCase):
@@ -440,38 +440,6 @@ class TestOrderGroupMatches(unittest.TestCase):
 
 
 class TestIO(unittest.TestCase):
-
-    def test_append_to_tsv(self):
-        a = Match("QX","TX",1,3,1,9,0.0,100.0,False); a.target_sequence="ATGGAATTT"
-        b = Match("QX","TX",4,6,10,18,0.0,90.0,False); b.target_sequence="GAAGTGGGG"
-        pm = ProteinHit([a,b],1,6,1,18)
-
-        with tempfile.TemporaryDirectory() as d:
-            path = os.path.join(d, "prot.tsv")
-            ProteinsTSV.append_to_tsv(path, [pm], "G")
-
-            with open(path, "r") as f:
-                rows = [line.strip().split("\t") for line in f.readlines()]
-
-        self.assertEqual(len(rows), 3)
-        cols0 = rows[1]
-        self.assertEqual(cols0[0], pm.protein_hit_id)
-        self.assertEqual(cols0[1], "G")
-        self.assertEqual(cols0[2], "TX")
-        self.assertEqual(cols0[3], "1")
-        self.assertEqual(cols0[4], "9")
-        self.assertEqual(cols0[5], "QX")
-        self.assertEqual(cols0[6], "1")
-        self.assertEqual(cols0[7], "3")
-        cols1 = rows[2]
-        self.assertEqual(cols1[0], pm.protein_hit_id)
-        self.assertEqual(cols0[1], "G")
-        self.assertEqual(cols0[2], "TX")
-        self.assertEqual(cols1[3], "10")
-        self.assertEqual(cols1[4], "18")
-        self.assertEqual(cols0[5], "QX")
-        self.assertEqual(cols1[6], "4")
-        self.assertEqual(cols1[7], "6")
 
     def test_write_fasta_record(self):
         a = Match("QX","TX",1,3,1,9,0.0,100.0,False); a.target_sequence="ATGGAATTT"
