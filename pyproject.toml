@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "needle"
+version = "0.1.0"
+dependencies = [
+  "tangle @ git+https://github.com/benjiec/tangle.git@main",
+  "heap @ git+https://github.com/benjiec/tangle-heap.git@main",
+  "biopython>=1.81",
+]
+description = "Protein Detection from HMM Profiles"
+requires-python = ">=3.9"
+
+[project.optional-dependencies]
+dev = [
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
