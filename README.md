@@ -38,4 +38,17 @@ are synced to Google Cloud storage, into a bucket.
 
 ## Protein Detection from HMM Profiles
 
+Run these two commands to search for proteins matching HMM profile in a genomic FASTA file
 
+```
+python3 scripts/hmmsearch-genome.py \
+  <hmm-file> <genomic-fasta-file> hmm-search-output.tsv
+python3 scripts/export-protein-results.py \
+  --query-database-name <genome-accession> \
+  <hmm-file> <genomic-fasta-file> hmm-search-output.tsv \
+  output_proteins.tsv output_proteins.faa
+```
+
+The final outputs are two files: a TSV file that enumerates the fragments on
+the contigs (this is like a GFF, in the tangle DetectedTable format), and a
+protein FASTA file.
