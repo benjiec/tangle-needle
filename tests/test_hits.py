@@ -512,7 +512,7 @@ class TestIO(unittest.TestCase):
             with open(p2) as f:
                 lines_nuc_1 = [l for l in f if l.strip()]
             # second export appends
-            export_protein_hits("GENOME1", [pm], p1, p2)
+            export_protein_hits("GENOME1", [pm], p1, p2, append=True)
             with open(p1) as f:
                 lines_prot_2 = [l for l in f if l.strip()]
             with open(p2) as f:

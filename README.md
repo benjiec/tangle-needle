@@ -58,8 +58,27 @@ to create a run directory under `runs` (or whatever value for `--run-dir`), and
 then follow instructions in the README file in that run directory.
 
 ```
-PYTHPATH=. python3 gcloud/hmm-detect/setup.py \
+python3 gcloud/hmm-detect/setup.py \
   --genome-accession GCF_002042975.1 \
   --run-dir=runs \
   ncbi-downloads/ncbi_dataset/data/GCF_002042975.1/GCF_002042975.1_ofav_dov_v1_genomic.fna
+```
+
+There are two output files, `.tsv` and `.faa`. If inputs had been pooled before
+from multiple genomes, e.g.
+
+```
+python3 scripts/pool-contigs.py \
+  input.pooled.fna \
+  genome_accession_1.fna genome_accession_2.fna ...
+```
+
+(note the pooled files must have genome accession as the file name stem)
+
+then results can be demultiplexed using
+
+```
+python3 scripts/demux-outputs.py \
+  output.pooled.tsv output.pooled.faa \
+  output.demux.tsv output.demux.faa
 ```

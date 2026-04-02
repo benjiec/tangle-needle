@@ -16,7 +16,8 @@ WORKDIR /needle
 COPY --chown=$MAMBA_USER:$MAMBA_USER pyproject.toml ./ 
 RUN micromamba run -n base pip install --no-cache-dir . || true
 
-COPY --chown=$MAMBA_USER:$MAMBA_USER . .
+COPY --chown=$MAMBA_USER:$MAMBA_USER needle .
+COPY --chown=$MAMBA_USER:$MAMBA_USER scripts .
 RUN micromamba run -n base pip install --no-cache-dir .
 
 ENV PATH="/needle:${PATH}"

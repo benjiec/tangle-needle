@@ -251,7 +251,9 @@ class ProteinHit:
             ]
             hasher.update("|".join(parts).encode("utf-8"))
         digest8 = hasher.hexdigest()[:8]
-        self._protein_hit_id = f"{base_q}_{base_t}_{digest8}"
+        # target accession which is contig accession may have multiplexed "|"
+        # in it to be stripped off, so we put that at the beginning
+        self._protein_hit_id = f"{base_t}_{base_q}_{digest8}"
         return self._protein_hit_id
 
     @property
