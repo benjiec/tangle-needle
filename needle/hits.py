@@ -496,23 +496,24 @@ def match_to_detected_row(protein_hit_id, match, genome_accession, batch):
     )
 
 
-def append_to_tsv(tsv_path, protein_hits, genome_accession):
+def write_tsv(tsv_path, protein_hits, genome_accession, append):
     batch = unique_batch()
     rows = [match_to_detected_row(hit.protein_hit_id, m, genome_accession, batch) for hit in protein_hits for m in hit.matches]
-    DetectedTable.write_tsv(tsv_path, rows, append = True)
+    DetectedTable.write_tsv(tsv_path, rows, append = append)
 
 
 def export_protein_hits(
     genome_accession: str,
     protein_hits: List[ProteinHit],
     proteins_aa_path: str,
-    proteins_tsv_path: str
+    proteins_tsv_path: str,
+    append = False
 ) -> None:
 
     protein_hits = [pm for pm in protein_hits if pm.can_produce_single_sequence()]
 
-    with open(proteins_aa_path, "a") as f_prot:
+    with open(proteins_aa_path, "at" if append else "wt") as f_prot:
         for pm in protein_hits:
             write_fasta_record(f_prot, pm)
 
-    append_to_tsv(proteins_tsv_path, protein_hits, genome_accession)
+    write_tsv(proteins_tsv_path, protein_hits, genome_accession, append)
