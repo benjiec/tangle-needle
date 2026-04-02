@@ -2,10 +2,14 @@ import os
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 from Bio.Seq import Seq
+
 from .sequence import extract_subsequence, extract_subsequence_strand_sensitive, compute_three_frame_translations
 from .match import Match, ProteinHit, order_matches_for_junctions, order_matches, NonlinearMatchException
 from .detect import DOM_EVALUE_LIMIT, hmm_search_genome
 from .hmm import hmmsearch, HMMCollection
+
+from tangle.detected import DetectedTable
+from tangle import unique_batch
 
 
 @dataclass
@@ -463,3 +467,52 @@ def hmm_expand(protein_hits, genomic_sequence_dict, hmm_collection):
             new_protein_hits[pm.protein_hit_id] = pm
 
     return list(new_protein_hits.values())
+
+
+
+def write_fasta_record(f, pm: ProteinHit) -> None:
+    pid = pm.protein_hit_id
+    seq = pm.collated_protein_sequence
+    f.write(f">{pid}\n")
+    f.write(seq + "\n")
+
+
+def match_to_detected_row(protein_hit_id, match, genome_accession, batch):
+    return dict(
+        detection_type="model",  # target coordinates relative to target_model not target_accession
+        detection_method="hmm",
+        batch=batch,
+        query_database=genome_accession,
+        query_type="contig",
+        query_accession=match.target_accession,
+        target_database=genome_accession,
+        target_type="protein",
+        target_accession=protein_hit_id,
+        target_model=match.query_accession,
+        query_start=match.target_start,
+        query_end=match.target_end,
+        target_start=match.query_start,
+        target_end=match.query_end
+    )
+
+
+def append_to_tsv(tsv_path, protein_hits, genome_accession):
+    batch = unique_batch()
+    rows = [match_to_detected_row(hit.protein_hit_id, m, genome_accession, batch) for hit in protein_hits for m in hit.matches]
+    DetectedTable.write_tsv(tsv_path, rows, append = True)
+
+
+def export_protein_hits(
+    genome_accession: str,
+    protein_hits: List[ProteinHit],
+    proteins_aa_path: str,
+    proteins_tsv_path: str
+) -> None:
+
+    protein_hits = [pm for pm in protein_hits if pm.can_produce_single_sequence()]
+
+    with open(proteins_aa_path, "a") as f_prot:
+        for pm in protein_hits:
+            write_fasta_record(f_prot, pm)
+
+    append_to_tsv(proteins_tsv_path, protein_hits, genome_accession)
