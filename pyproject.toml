@@ -6,8 +6,8 @@ build-backend = "setuptools.build_meta"
 name = "needle"
 version = "0.1.0"
 dependencies = [
-  "tangle @ git+https://github.com/benjiec/tangle.git@main",
-  "heap @ git+https://github.com/benjiec/tangle-heap.git@main",
+  "tangle @ git+https://github.com/benjiec/tangle.git@1481712",
+  "heap @ git+https://github.com/benjiec/tangle-heap.git@7367a78",
   "biopython>=1.81",
 ]
 description = "Protein Detection from HMM Profiles"

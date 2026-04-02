@@ -23,11 +23,11 @@ def main():
     hmm_collection = HMMCollection(args.hmm_file, accession_ids)
 
     try:
-	# use HMM to refine protein search at detected locus this step helps
-	# because we are using conditinoal e-value rather than independent
-	# e-value, for matches, which would be more sensitive given we already
-	# decided the locus is where protein is
-        protein_matches = hmm_expand(protein_matches, res._target_sequences_by_accession, hmm_collection)
+	# skipping this now: seems like normal detection through the contig
+	# works ok and the expansion logic here is expensive w/o getting finer
+	# results.
+        #
+        # protein_matches = hmm_expand(protein_matches, res._target_sequences_by_accession, hmm_collection)
 
         pre_filter = len(protein_matches)
         protein_matches = [m for m in protein_matches if m.can_collate()]
