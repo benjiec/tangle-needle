@@ -318,7 +318,8 @@ def find_more_matches_at_locus(query_accession, hmm_file, old_start, old_end, ta
     )
 
     if not hmm_rows:
-        print("no hmmsearch results")
+        if VERBOSE_EXPAND:
+            print("no hmmsearch results")
         return None
 
     new_matches = []
@@ -387,7 +388,16 @@ def find_more_matches_at_locus(query_accession, hmm_file, old_start, old_end, ta
                         mark = " =>"
                     print(f" {mark} {match.target_start}, {match.target_end}, {match.query_start}, {match.query_end}")
             return None
-   
+  
+    # sanity check - if we cannot collate what we think are the old matches,
+    # that means what we think are the old matches are likely repeats of the
+    # same match so we can just stop
+
+    if not ProteinHit.can_collate_from_matches(new_matches[index_of_old_start:index_of_old_end+1]):
+        if VERBOSE_EXPAND:
+            print("sticking with the old matches")
+        return None
+ 
     # move starting index as far back as we can
     index_of_new_start = index_of_old_start
     i = index_of_old_start-1
