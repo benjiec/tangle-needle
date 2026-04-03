@@ -11,6 +11,8 @@ from .hmm import hmmsearch, HMMCollection
 from tangle.detected import DetectedTable
 from tangle import unique_batch
 
+VERBOSE_EXPAND = 0
+
 
 @dataclass
 class Candidate:
@@ -72,7 +74,7 @@ def generate_transition_candidates(
 
 def hmmsearch_find_best_candidate(hmm_file_name, sequences):
     matches = hmmsearch(hmm_file_name, sequences, cutoff=False, gap_removal=False)
-    matches = [row for row in matches if row["seq_evalue"] <= 0.01]
+    matches = [row for row in matches if row["seq_evalue"] <= DOM_EVALUE_LIMIT]
 
     best_idx = None
     best_score = float("-inf")
@@ -303,23 +305,28 @@ def hmm_clean(protein_hits: List[ProteinHit], hmm_collection: HMMCollection, ove
     return list(cleaned.values())
 
 
-def find_matches_at_locus(old_matches, full_seq, start, end, hmm_file, step=2000, max_search_distance=30000, force_extend=False, direction=0):
+def find_more_matches_at_locus(query_accession, hmm_file, old_start, old_end, target_full_sequence, target_accession, target_left, target_right, strand, cpus=None):
 
-    target_accession = old_matches[0].target_accession
-    # print("HMM search space", target_accession, start, end)
     hmm_rows = hmm_search_genome(
-        hmm_file, {target_accession: full_seq},
-        target_accession = target_accession, target_left = min(start, end), target_right = max(start, end),
-        strand = -1 if old_matches[0].on_reverse_strand else 1
+        hmm_file, {target_accession: target_full_sequence},
+        target_accession = target_accession,
+        target_left = target_left,
+        target_right = target_right,
+        strand = strand,
+        cpus = cpus,
+        filter_by_evalue_cond = True  # we already assume there's a protein here...
     )
+
+    if not hmm_rows:
+        print("no hmmsearch results")
+        return None
 
     new_matches = []
     for hmm_row in hmm_rows:
-        target_sequence = extract_subsequence_strand_sensitive(full_seq, hmm_row["ali_from"], hmm_row["ali_to"])
-
+        target_sequence = extract_subsequence_strand_sensitive(target_full_sequence, hmm_row["ali_from"], hmm_row["ali_to"])
         match = Match(
-            query_accession=old_matches[0].query_accession,
-            target_accession=old_matches[0].target_accession,
+            query_accession=query_accession,
+            target_accession=target_accession,
             query_start=hmm_row["hmm_from"],
             query_end=hmm_row["hmm_to"],
             target_start=hmm_row["ali_from"],
@@ -332,103 +339,112 @@ def find_matches_at_locus(old_matches, full_seq, start, end, hmm_file, step=2000
         assert match.matched_sequence == match.target_sequence_translated()
         new_matches.append(match)
 
-    """
-    print("Found")
-    for nm in sorted(new_matches, key=lambda m: m.target_start):
-        print("    ", nm.target_start, nm.target_end, nm.query_start, nm.query_end)
-    """
+    index_of_old_start = None
+    index_of_old_end = None
+    index_of_new_start = None
+    index_of_new_end = None
 
-    if not new_matches:
-        # print("no new matches, stop searching")
-        return None
+    if strand > 0:
+        new_matches = sorted(new_matches, key=lambda m: m.target_start)
+        for i, match in enumerate(new_matches):
+            if match.target_end > old_start and index_of_old_start is None:
+                index_of_old_start = i
+            if match.target_end >= old_end and index_of_old_end is None:
+                index_of_old_end = i
+        if index_of_old_end is None and index_of_old_start is not None:
+            index_of_old_end = len(new_matches)-1
 
-    try:
-        new_matches = order_matches(new_matches, cleanup=True)
-    except NonlinearMatchException as e:
-        # print(new_matches[0].query_accession, str(e))
-        pass
+        if index_of_old_start is None or index_of_old_end is None or index_of_old_end < index_of_old_start:
+            if VERBOSE_EXPAND:
+                print("cannot find old start and end indices on fwd strand")
+                for i, match in enumerate(new_matches):
+                    mark = "   "
+                    if i in (index_of_old_start, index_of_old_end):
+                        mark = " ->"
+                    if i in (index_of_new_start, index_of_new_end):
+                        mark = " =>"
+                    print(f" {mark} {match.target_start}, {match.target_end}, {match.query_start}, {match.query_end}")
+            return None
 
-    if not ProteinHit.can_collate_from_matches(new_matches):
-        # print("can no longer collate, stop searching")
-        return None
-
-    old_query_start = min(m.query_start for m in old_matches)
-    old_query_end = max(m.query_end for m in old_matches)
-    old_nmatches = len(old_matches)
-
-    new_query_start = min(m.query_start for m in new_matches)
-    new_query_end = max(m.query_end for m in new_matches)
-    new_nmatches = len(new_matches)
-
-    same_results = \
-       old_query_start == new_query_start and \
-       old_query_end == new_query_end and \
-       old_nmatches == new_nmatches
-
-    if end > start:
-       dist_at_end_to_last_match = end - max(m.target_end for m in new_matches)
-       dist_at_start_to_last_match = min(m.target_start for m in new_matches) - start
     else:
-       dist_at_start_to_last_match = start - max(m.target_start for m in new_matches)
-       dist_at_end_to_last_match = min(m.target_end for m in new_matches) - end
+        new_matches = sorted(new_matches, key=lambda m: -m.target_start)
+        for i, match in enumerate(new_matches):
+            if match.target_end < old_start and index_of_old_start is None:
+                index_of_old_start = i
+            elif match.target_end <= old_end and index_of_old_end is None:
+                index_of_old_end = i
+        if index_of_old_end is None and index_of_old_start is not None:
+            index_of_old_end = len(new_matches)-1
 
-    if force_extend is False and \
-       same_results and \
-       max(dist_at_end_to_last_match, dist_at_start_to_last_match) > max_search_distance:
-        # print("nothing changed for too long")
-        return None
+        if index_of_old_start is None or index_of_old_end is None or index_of_old_end < index_of_old_start:
+            if VERBOSE_EXPAND:
+                print("cannot find old start and end indices on rev strand")
+                for i, match in enumerate(new_matches):
+                    mark = "   "
+                    if i in (index_of_old_start, index_of_old_end):
+                        mark = " ->"
+                    if i in (index_of_new_start, index_of_new_end):
+                        mark = " =>"
+                    print(f" {mark} {match.target_start}, {match.target_end}, {match.query_start}, {match.query_end}")
+            return None
+   
+    # move starting index as far back as we can
+    index_of_new_start = index_of_old_start
+    i = index_of_old_start-1
+    while i >= 0:
+        if ProteinHit.can_collate_from_matches(new_matches[i:index_of_old_end+1]):
+            index_of_new_start = i
+            i -= 1
+        else:
+            break
+    
+    # move ending index as far forward as we can
+    index_of_new_end = index_of_old_end
+    i = index_of_old_end+1
+    while i <= len(new_matches)-1:
+        if ProteinHit.can_collate_from_matches(new_matches[index_of_old_start:i+1]):
+            index_of_new_end = i
+            i += 1
+        else:
+            break
 
-    """
-    print("Using HMM, continue to search", new_matches[0].target_accession, new_matches[0].query_accession)
-    print("Before", old_query_start, old_query_end, old_nmatches)
-    print("Now", new_query_start, new_query_end, new_nmatches, "collatable?", ProteinHit.can_collate_from_matches(new_matches))
-    """
+    if VERBOSE_EXPAND:
+        print("found:")
+        for i, match in enumerate(new_matches):
+            mark = "  "
+            if i in (index_of_old_start, index_of_old_end):
+                mark = "->"
+            if i in (index_of_new_start, index_of_new_end):
+                mark = "=>"
+            print(f"  {mark} {match.target_start}, {match.target_end}, {match.query_start}, {match.query_end}")
 
-    if end > start:
-      if start > 1 or end < len(full_seq):
-          if direction == -1:
-              new_start = max(1, start-step)
-              new_end = end
-          elif direction == 1:
-              new_start = start
-              new_end = min(len(full_seq), end+step)
-          else:
-              new_start = max(1, start-step)
-              new_end = min(len(full_seq), end+step)
-
-          if new_start != start or new_end != end:
-              more_matches = find_matches_at_locus(new_matches, full_seq, new_start, new_end, hmm_file,
-                                                   step=step, max_search_distance=max_search_distance, direction=direction)
-              return more_matches if more_matches else new_matches
-    else:
-      if end > 1 or start < len(full_seq):
-          if direction == -1:
-              new_start = min(len(full_seq), start+step)
-              new_end = end
-          elif direction == 1:
-              new_start = start
-              new_end = max(1, end-step)
-          else:
-              new_start = min(len(full_seq), start+step)
-              new_end = max(1, end-step)
-
-          if new_start != start or new_end != end:
-              more_matches = find_matches_at_locus(new_matches, full_seq, new_start, new_end, hmm_file,
-                                                   step=step, max_search_distance=max_search_distance, direction=direction)
-              return more_matches if more_matches else new_matches
-
-    return new_matches
+    return new_matches[index_of_new_start:index_of_new_end+1]
 
 
-def hmm_expand_protein(protein_hit, genomic_sequence_dict, hmm_file, direction):
-    """
-    Further refine protein match using hmmsearch, at the genomic locus. direction: 0 both, -1 left, 1 right
-    """
+def hmm_expand_protein(protein_hit, genomic_sequence_dict, hmm_file, cpus = None):
 
     target_full_sequence = genomic_sequence_dict[protein_hit.target_accession]
+    query_accession = protein_hit.matches[0].query_accession
+    target_accession = protein_hit.matches[0].target_accession
+    strand = -1 if protein_hit.matches[0].on_reverse_strand else 1
+    start = protein_hit.target_start
+    end = protein_hit.target_end
 
-    new_matches = find_matches_at_locus(protein_hit.matches, target_full_sequence, protein_hit.target_start, protein_hit.target_end, hmm_file,
-                                        direction=direction, force_extend=True)
+    max_search_distance = 30000
+    target_left = max(min(start, end) - max_search_distance, 1)
+    target_right = min(max(start, end) + max_search_distance, len(target_full_sequence))
+
+    if VERBOSE_EXPAND:
+        print(f"{query_accession} on {target_accession}, {target_left}-{target_right} (based on {start}-{end}), strand {strand}, contig {len(target_full_sequence)}")
+        for i, match in enumerate(protein_hit.matches):
+            print(f" old {match.target_start}, {match.target_end}, {match.query_start}, {match.query_end}")
+
+    new_matches = find_more_matches_at_locus(
+        query_accession, hmm_file, start, end,
+        target_full_sequence, target_accession, target_left, target_right, strand,
+        cpus = cpus
+    )
+
     if new_matches is None:
         return protein_hit
 
@@ -444,7 +460,7 @@ def hmm_expand_protein(protein_hit, genomic_sequence_dict, hmm_file, direction):
     return new_pm
 
 
-def hmm_expand(protein_hits, genomic_sequence_dict, hmm_collection):
+def hmm_expand(protein_hits, genomic_sequence_dict, hmm_collection, cpus = None):
     new_protein_hits = {}
 
     skipped = []
@@ -462,12 +478,10 @@ def hmm_expand(protein_hits, genomic_sequence_dict, hmm_collection):
                 skipped.append(pm.query_accession)
                 print("skipping", pm.query_accession, "cannot find HMM profile")
         else:
-            pm = hmm_expand_protein(pm, genomic_sequence_dict, hmm_profile, -1)
-            pm = hmm_expand_protein(pm, genomic_sequence_dict, hmm_profile, 1)
+            pm = hmm_expand_protein(pm, genomic_sequence_dict, hmm_profile, cpus = cpus)
             new_protein_hits[pm.protein_hit_id] = pm
 
     return list(new_protein_hits.values())
-
 
 
 def write_fasta_record(f, pm: ProteinHit) -> None:

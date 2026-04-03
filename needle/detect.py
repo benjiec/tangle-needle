@@ -238,7 +238,7 @@ def get_aa_sequences(target_accession, target_sequence, target_left = None, targ
 
 def hmm_search_genome(hmm_file, genomic_fasta_dict, min_aa_length = 8,
                       target_accession = None, target_left = None, target_right = None,
-                      strand = None, cpus = None):
+                      strand = None, cpus = None, filter_by_evalue_cond = False):
 
     fragments = []
     for acc, genome_sequence in genomic_fasta_dict.items():
@@ -258,7 +258,10 @@ def hmm_search_genome(hmm_file, genomic_fasta_dict, min_aa_length = 8,
         name_to_coordinates[target_name] = (target_accession, target_start, target_end)
 
     hmm_rows = hmmsearch_sequence_dict(hmm_file, translated_fasta, cpu=cpus)
-    hmm_rows = [row for row in hmm_rows if row["dom_evalue"] <= DOM_EVALUE_LIMIT]
+    if filter_by_evalue_cond:
+        hmm_rows = [row for row in hmm_rows if row["dom_evalue_cond"] <= DOM_EVALUE_LIMIT]
+    else:
+        hmm_rows = [row for row in hmm_rows if row["dom_evalue"] <= DOM_EVALUE_LIMIT]
 
     filtered_rows = []
     for row in hmm_rows:
