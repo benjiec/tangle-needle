@@ -11,8 +11,8 @@ args = ap.parse_args()
 
 for genome_fna in args.genome_fnas:
     contigs = read_fasta_as_dict(genome_fna)
-    genome_accession = Path(genome_fna).stem
-    print(genome_accession)
+    genome_accession = Path(genome_fna).parent.name
+    print(f"Using {genome_accession} as accession for {genome_fna}")
     converted = {}
     for acc, seq in contigs.items():
         converted[f"{genome_accession}|{acc}"] = seq
