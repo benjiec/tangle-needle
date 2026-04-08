@@ -18,10 +18,12 @@ gcloud batch jobs describe hmm-detect-${BATCH_NAME} --location us-east1 | head -
 
 # Retrieve outouts
 
-gsutil cat ${GC_RUN_OUTPUT_DIR}/output_\*.tsv > protein_fragments_all.tsv
-gsutil cat ${GC_RUN_OUTPUT_DIR}/output_\*.faa > proteins.faa
-{ head -1 protein_fragments_all.tsv; grep -v query_database protein_fragments_all.tsv; } > protein_fragments.tsv
-rm protein_fragments_all.tsv
+# Copy
+gsutil cp ${GC_RUN_OUTPUT_DIR}/output_\*.tsv .
+gsutil cp ${GC_RUN_OUTPUT_DIR}/output_\*.faa .
+
+# Rclone, but replace gs:// with gcs://
+rclone sync ${GC_RUN_OUTPUT_DIR}/ . -v
 
 # Delete job in case you need to resubmit
 
