@@ -1,7 +1,10 @@
 # remove duplicated entries based on sequence
 
+import shutil
 import itertools
 import ahocorasick
+from pathlib import Path
+
 
 def filter_contained_sequences(rows, data_dict):
     # deduplicate exact strings first to reduce trie size
@@ -71,20 +74,30 @@ if __name__ == "__main__":
     from tangle.detected import DetectedTable
 
     ap = argparse.ArgumentParser()
-    ap.add_argument("tsv_fn")
-    ap.add_argument("fasta_fn")
-    ap.add_argument("filtered_tsv_fn")
-    ap.add_argument("filtered_fasta_fn")
-
+    ap.add_argument("genome_dirs", nargs="+")
+    ap.add_argument("--forget-original", action="store_true", default=False)
+    ap.add_argument("--demuxed-fasta-filename", default="proteins.faa")
+    ap.add_argument("--demuxed-tsv-filename", default="proteins.tsv")
     args = ap.parse_args()
 
-    source = CSVSource(DetectedTable, args.tsv_fn)
-    rows = source.values()
-    protein_sequences = read_fasta_as_dict(args.fasta_fn)
+    for genome_dir in args.genome_dirs:
+        genome_dir_path = Path(genome_dir)
+        tsv_fn = str(genome_dir_path / args.demuxed_tsv_filename)
+        faa_fn = str(genome_dir_path / args.demuxed_fasta_filename)
 
-    filtered = filter_contained_sequences(rows, protein_sequences)
-    print("filtered from", len(protein_sequences), "to", len(filtered))
+        source = CSVSource(DetectedTable, tsv_fn)
+        rows = source.values()
+        protein_sequences = read_fasta_as_dict(faa_fn)
 
-    write_fasta_from_dict(filtered, args.filtered_fasta_fn)
-    filtered_rows = [row for row in rows if row["target_accession"] in filtered]
-    DetectedTable.write_tsv(args.filtered_tsv_fn, filtered_rows)
+        filtered = filter_contained_sequences(rows, protein_sequences)
+        print(faa_fn, "filtered from", len(protein_sequences), "to", len(filtered))
+
+        if not args.forget_original:
+            orig_tsv_fn = tsv_fn+".orig"
+            shutil.copy(tsv_fn, orig_tsv_fn)
+            orig_faa_fn = faa_fn+".orig"
+            shutil.copy(faa_fn, orig_faa_fn)
+
+        write_fasta_from_dict(filtered, faa_fn)
+        filtered_rows = [row for row in rows if row["target_accession"] in filtered]
+        DetectedTable.write_tsv(tsv_fn, filtered_rows)
