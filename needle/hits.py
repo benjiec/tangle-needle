@@ -237,7 +237,12 @@ def hmm_clean_protein(
 
     # Compute AA per match and junction candidates
     aa_map = aa_by_match(old_matches)
-    pairs = order_matches_for_junctions(old_matches)
+    try:
+        pairs = order_matches_for_junctions(old_matches)
+    except NonlinearMatchException as e:
+        print("Cannot order existing detected matches, revert")
+        print(protein_hit.collated_protein_sequence)
+        return protein_hit
 
     selected: Dict[int, Candidate] = {}
     for idx, (left, right, overlap_len, gap_len) in enumerate(pairs):
