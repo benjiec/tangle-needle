@@ -15,6 +15,8 @@ Download the following profiles
     * Then concatenate all the profiles together: `cat profiles/*.hmm > ko.hmm`
       * Remove all entries that are RNA or small RNAs: make a list of KOs to include, then use `hmmfetch -f` to create a new `.hmm` file
       * Run `hmmfetch --index ko.hmm`
+      * Run `hmmpress ko.hmm`
+      * If you run the above two out of order, may need to `mv ko.hmm.h3m.ssi ko.hmm.ssi`
 
 Put these files in the same directory then set the following environment variable
 
