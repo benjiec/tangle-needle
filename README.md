@@ -13,8 +13,8 @@ Download the following profiles
 
   * KEGG KO profile HMMs: `https://www.genome.jp/ftp/db/kofam/profiles.tar.gz`
     * Then concatenate all the profiles together: `cat profiles/*.hmm > ko.hmm`
-    * Remove all entries that are RNA or small RNAs: make a list of KOs to include, then use `hmmfetch -f` to create a new `.hmm` file
-    * Run `hmmfetch --index ko.hmm`
+      * Remove all entries that are RNA or small RNAs: make a list of KOs to include, then use `hmmfetch -f` to create a new `.hmm` file
+      * Run `hmmfetch --index ko.hmm`
 
 Put these files in the same directory then set the following environment variable
 
