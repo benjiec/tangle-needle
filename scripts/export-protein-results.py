@@ -3,7 +3,9 @@ import argparse
 
 from needle.detect import Results
 from needle.match import group_matches
-from needle.hits import hmm_expand, hmm_clean, export_protein_hits
+from needle.clean import hmm_clean
+from needle.expand import hmm_expand
+from needle.hits import export_protein_hits
 from needle.hmm import HMMCollection
 
 def main():
