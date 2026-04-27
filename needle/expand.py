@@ -5,17 +5,29 @@ from .detect import hmm_search_genome
 VERBOSE_EXPAND = 0
 
 
-def find_more_matches_at_locus(query_accession, hmm_file, old_start, old_end, target_full_sequence, target_accession, target_left, target_right, strand, cpus=None):
+def find_more_matches_at_locus(
+  query_accession,
+  hmm_file,
+  old_start,
+  old_end,
+  target_full_sequence,
+  target_accession,
+  target_left,
+  target_right,
+  strand,
+  cpus=None,
+  hmm_rows=None):
 
-    hmm_rows = hmm_search_genome(
-        hmm_file, {target_accession: target_full_sequence},
-        target_accession = target_accession,
-        target_left = target_left,
-        target_right = target_right,
-        strand = strand,
-        cpus = cpus,
-        filter_by_evalue_cond = True  # we already assume there's a protein here...
-    )
+    if hmm_rows is None:
+        hmm_rows = hmm_search_genome(
+            hmm_file, {target_accession: target_full_sequence},
+            target_accession = target_accession,
+            target_left = target_left,
+            target_right = target_right,
+            strand = strand,
+            cpus = cpus,
+            filter_by_evalue_cond = True  # we already assume there's a protein here...
+        )
 
     if not hmm_rows:
         if VERBOSE_EXPAND:
@@ -95,7 +107,7 @@ def find_more_matches_at_locus(query_accession, hmm_file, old_start, old_end, ta
 
     if not ProteinHit.can_collate_from_matches(new_matches[index_of_old_start:index_of_old_end+1]):
         if VERBOSE_EXPAND:
-            print("sticking with the old matches")
+            print("sticking with the old matches", index_of_old_start, index_of_old_end)
         return None
  
     # move starting index as far back as we can
