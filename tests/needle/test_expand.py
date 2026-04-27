@@ -1,5 +1,6 @@
 import unittest
-from needle.expand import find_more_matches_at_locus
+from needle.expand import find_more_matches_at_locus, hmm_expand_protein
+from needle.match import ProteinHit, Match
 
 
 class TestLookingForProtein(unittest.TestCase):
@@ -130,3 +131,41 @@ class TestLookingForProtein(unittest.TestCase):
         matches = find_more_matches_at_locus(None, None, 201, 330, "A"*500, "target", None, None, 1, hmm_rows = rows)
         self.assertEqual(len(matches), 3)
         self.assertEqual([m.target_start for m in matches], [101, 201, 301])
+
+    def test_expand_protein_returns_new_protein_hit(self):
+
+        rows = [
+            self.make_hmm_row(0.01, 10,  1, 10, 101, 130, "K"*10),
+            self.make_hmm_row(0.01, 10, 11, 20, 201, 230, "K"*10),
+            self.make_hmm_row(0.01, 10, 21, 30, 301, 330, "K"*10),
+            self.make_hmm_row(0.01, 10, 31, 40, 401, 430, "K"*10),
+        ]
+
+        a = Match("Q", "T", 11, 20, 201, 230, 0.0, 100.0)
+        b = Match("Q", "T", 21, 30, 301, 330, 0.0, 100.0)
+        old_protein_hit = ProteinHit([a, b], 11, 30, 201, 330)
+ 
+        new_hit = hmm_expand_protein(old_protein_hit, {"T": "A"*500}, None, threshold = None, hmm_rows = rows)
+        self.assertEqual(len(new_hit.matches), 4)
+
+    def test_expand_protein_rejects_protein_below_threshold(self):
+
+        rows = [
+            self.make_hmm_row(0.01, 10,  1, 10, 101, 130, "K"*10),
+            self.make_hmm_row(0.01, 10, 11, 20, 201, 230, "K"*10),
+            self.make_hmm_row(0.01, 10, 21, 30, 301, 330, "K"*10),
+            self.make_hmm_row(0.01, 10, 31, 40, 401, 430, "K"*10),
+        ]
+
+        a = Match("Q", "T", 11, 20, 201, 230, 0.0, 100.0)
+        b = Match("Q", "T", 21, 30, 301, 330, 0.0, 100.0)
+        old_protein_hit = ProteinHit([a, b], 11, 30, 201, 330)
+ 
+        new_hit = hmm_expand_protein(old_protein_hit, {"T": "A"*500}, None, threshold = None, hmm_rows = rows)
+        self.assertEqual(new_hit is None, False)
+
+        new_hit = hmm_expand_protein(old_protein_hit, {"T": "A"*500}, None, threshold = 40, hmm_rows = rows)
+        self.assertEqual(new_hit is None, False)
+
+        new_hit = hmm_expand_protein(old_protein_hit, {"T": "A"*500}, None, threshold = 41, hmm_rows = rows)
+        self.assertEqual(new_hit is None, True)

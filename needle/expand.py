@@ -47,7 +47,8 @@ def find_more_matches_at_locus(
             e_value=hmm_row["dom_evalue"],
             identity=None,
             target_sequence=target_sequence,
-            matched_sequence=hmm_row["matched_sequence"]
+            matched_sequence=hmm_row["matched_sequence"],
+            score=hmm_row["dom_score"]
         )
         assert match.matched_sequence == match.target_sequence_translated()
         new_matches.append(match)
@@ -143,7 +144,7 @@ def find_more_matches_at_locus(
     return new_matches[index_of_new_start:index_of_new_end+1]
 
 
-def hmm_expand_protein(protein_hit, genomic_sequence_dict, hmm_file, cpus = None):
+def hmm_expand_protein(protein_hit, genomic_sequence_dict, hmm_file, threshold = None, cpus = None, hmm_rows = None):
 
     target_full_sequence = genomic_sequence_dict[protein_hit.target_accession]
     query_accession = protein_hit.matches[0].query_accession
@@ -164,11 +165,17 @@ def hmm_expand_protein(protein_hit, genomic_sequence_dict, hmm_file, cpus = None
     new_matches = find_more_matches_at_locus(
         query_accession, hmm_file, start, end,
         target_full_sequence, target_accession, target_left, target_right, strand,
-        cpus = cpus
+        cpus = cpus,
+        hmm_rows = hmm_rows
     )
 
     if new_matches is None:
         return protein_hit
+
+    if threshold:
+        match_total_score = sum([m.score for m in new_matches])
+        if match_total_score < threshold:
+            return None
 
     new_pm = ProteinHit(
         matches=new_matches,
@@ -182,7 +189,7 @@ def hmm_expand_protein(protein_hit, genomic_sequence_dict, hmm_file, cpus = None
     return new_pm
 
 
-def hmm_expand(protein_hits, genomic_sequence_dict, hmm_collection, cpus = None):
+def hmm_expand(protein_hits, genomic_sequence_dict, hmm_collection, thresholds = None, cpus = None):
     new_protein_hits = {}
 
     skipped = []
@@ -200,7 +207,13 @@ def hmm_expand(protein_hits, genomic_sequence_dict, hmm_collection, cpus = None)
                 skipped.append(pm.query_accession)
                 print("skipping", pm.query_accession, "cannot find HMM profile")
         else:
-            pm = hmm_expand_protein(pm, genomic_sequence_dict, hmm_profile, cpus = cpus)
-            new_protein_hits[pm.protein_hit_id] = pm
+            threshold = None
+            if thresholds and pm.query_accession in thresholds:
+                threshold = thresholds[pm.query_accession]
+                if VERBOSE_EXPAND:
+                    print("using", threshold, "as threshold for", pm.query_accession)
+            pm = hmm_expand_protein(pm, genomic_sequence_dict, hmm_profile, threshold = threshold, cpus = cpus)
+            if pm:
+                new_protein_hits[pm.protein_hit_id] = pm
 
     return list(new_protein_hits.values())

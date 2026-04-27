@@ -8,6 +8,24 @@ from needle.expand import hmm_expand
 from needle.hits import export_protein_hits
 from needle.hmm import HMMCollection
 
+
+def build_thresholds_dict(thresholds_file, threshold_frac):
+    from heap.ko import KOThresholdTable
+    from tangle.models import CSVSource
+
+    src = CSVSource(KOThresholdTable, thresholds_file)
+    values = src.values()
+    print(values)
+
+    thresholds = {}
+    for row in values:
+        t = row["threshold"]
+        if t < 0:
+           t = row["alen"]
+        thresholds[row["model"]] = threshold_frac*t
+    return thresholds
+
+
 def main():
     parser = argparse.ArgumentParser(description="Export protein matches from detection results TSV.")
     parser.add_argument("hmm_file", help="HMM file to use for improve search results")
@@ -18,6 +36,8 @@ def main():
     parser.add_argument("--query-database-name", required=True)
     parser.add_argument("--append", action="store_true", default=False)
     parser.add_argument("--cpus", type=int, default=None)
+    parser.add_argument("--threshold-file")
+    parser.add_argument("--threshold-frac", default=0.8)
     args = parser.parse_args()
 
     res = Results(args.hmm_search_results_tsv, target_fasta_path=args.fna_file)
@@ -35,7 +55,18 @@ def main():
 	# conserved or smaller fragments between and beyond already detected
 	# fragments.
 
-        protein_matches = hmm_expand(protein_matches, res._target_sequences_by_accession, hmm_collection, cpus=args.cpus)
+        thresholds = None
+
+        if args.threshold_file:
+            thresholds = build_thresholds_dict(args.threshold_file, args.threshold_frac)
+
+        protein_matches = hmm_expand(
+            protein_matches,
+            res._target_sequences_by_accession,
+            hmm_collection,
+            thresholds = thresholds,
+            cpus = args.cpus
+        )
 
 	# the cleaning step attempts to remove overlaps by finding the best
 	# overlap (by how well the overlap matches to the HMM profile) between

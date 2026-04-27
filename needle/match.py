@@ -22,6 +22,7 @@ class Match:  # does not support matches across circular boundary
     identity: float
     matched_sequence: Optional[str] = None
     target_sequence: Optional[str] = None  # 5' to 3'
+    score: Optional[float] = None
 
     @property
     def on_reverse_strand(self) -> bool:
