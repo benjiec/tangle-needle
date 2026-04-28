@@ -49,7 +49,7 @@
               "commands": [
                 "/bin/bash",
                 "-c",
-                "python3 scripts/export-protein-results.py --cpus 4 --query-database-name ${GENOME_ACCESSION} /data/ko.hmm /data/input_${BATCH_TASK_INDEX}.fna /data/detected_${BATCH_TASK_INDEX}.tsv /data/output_${BATCH_TASK_INDEX}.tsv /data/output_${BATCH_TASK_INDEX}.faa"
+                "python3 scripts/export-protein-results.py --cpus 4 --query-database-name ${GENOME_ACCESSION} --threshold-file /data/ko_thresholds.tsv /data/ko.hmm /data/input_${BATCH_TASK_INDEX}.fna /data/detected_${BATCH_TASK_INDEX}.tsv /data/output_${BATCH_TASK_INDEX}.tsv /data/output_${BATCH_TASK_INDEX}.faa"
               ],
               "volumes": [
                 "/data:/data" 

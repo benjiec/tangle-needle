@@ -12,6 +12,7 @@ if [ ! -f "$HMM_FILE" ]; then
   echo "HMM file missing. Downloading from GCS..."
   gsutil -m -o "GSUtil:check_hashes=never" cp ${GC_HMM_PATH}/ko.hmm "$WORKSPACE/"
   gsutil -m -o "GSUtil:check_hashes=never" cp ${GC_HMM_PATH}/ko.hmm.ssi "$WORKSPACE/"
+  gsutil -m -o "GSUtil:check_hashes=never" cp ${GC_HMM_PATH}/ko_thresholds.tsv "$WORKSPACE/"
 else
   echo "HMM file already exists. Skipping download."
 fi
