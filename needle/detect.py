@@ -258,7 +258,7 @@ def hmm_search_genome(hmm_file, genomic_fasta_dict, min_aa_length = 8,
         # print(target_name, seq)
         name_to_coordinates[target_name] = (target_accession, target_start, target_end)
         total_length += len(seq)
-    print(f"searching {len(translated_fasta)} sequences, total {total_length}")
+    # print(f"searching {len(translated_fasta)} sequences, total {total_length}")
 
     hmm_rows = hmmsearch_sequence_dict(hmm_file, translated_fasta, cpu=cpus)
     if filter_by_evalue_cond:
