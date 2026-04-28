@@ -144,6 +144,7 @@ def _clone(m: Match) -> Match:
         identity=m.identity,
         matched_sequence=m.matched_sequence,
         target_sequence=m.target_sequence,
+        score=m.score
     )
 
 

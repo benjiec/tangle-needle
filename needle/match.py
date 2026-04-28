@@ -160,7 +160,7 @@ def order_matches_for_junctions(matches: List[Match]) -> List[Tuple[Match, Match
         cur_right = junctions[0][1]
         for left, right in junctions[1:]:
             if left <= cur_right:
-                raise NonlinearMatchException("Junctions overlap")
+                raise NonlinearMatchException(f"Junctions overlap: left {left}, cur_right {cur_right}")
             cur_right = right
 
     return pairs
@@ -183,11 +183,12 @@ class ProteinHit:
         return self.target_start > self.target_end
 
     @staticmethod
-    def can_collate_from_matches(matches) -> bool:
+    def can_collate_from_matches(matches, verbose=False) -> bool:
         try:
             pairs = order_matches_for_junctions(matches)
         except NonlinearMatchException as e:
-            # print(str(e))
+            if verbose:
+                print(str(e))
             return False
         return True
 

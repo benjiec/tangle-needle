@@ -24,7 +24,9 @@ def match_to_detected_row(protein_hit_id, match, genome_accession, batch):
         query_start=match.target_start,
         query_end=match.target_end,
         target_start=match.query_start,
-        target_end=match.query_end
+        target_end=match.query_end,
+        evalue=match.e_value,
+        bitscore=match.score
     )
 
 

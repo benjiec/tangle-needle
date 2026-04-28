@@ -5,6 +5,16 @@ from .detect import hmm_search_genome
 VERBOSE_EXPAND = 0
 
 
+def print_matches(matches, index_of_old_start, index_of_old_end, index_of_new_start, index_of_new_end):
+    for i, match in enumerate(matches):
+        mark = "   "
+        if i in (index_of_old_start, index_of_old_end):
+            mark = " ->"
+        if i in (index_of_new_start, index_of_new_end):
+            mark = " =>"
+        print(f" {mark} {match.target_start}, {match.target_end}, {match.query_start}, {match.query_end}, {match.e_value}, {match.score}")
+
+
 def find_more_matches_at_locus(
   query_accession,
   hmm_file,
@@ -71,13 +81,7 @@ def find_more_matches_at_locus(
         if index_of_old_start is None or index_of_old_end is None or index_of_old_end < index_of_old_start:
             if VERBOSE_EXPAND > 0:
                 print("cannot find old start and end indices on fwd strand")
-                for i, match in enumerate(new_matches):
-                    mark = "   "
-                    if i in (index_of_old_start, index_of_old_end):
-                        mark = " ->"
-                    if i in (index_of_new_start, index_of_new_end):
-                        mark = " =>"
-                    print(f" {mark} {match.target_start}, {match.target_end}, {match.query_start}, {match.query_end}")
+                print_matches(new_matches, index_of_old_start, index_of_old_end, index_of_new_start, index_of_new_end)
             return None
 
     else:
@@ -93,29 +97,27 @@ def find_more_matches_at_locus(
         if index_of_old_start is None or index_of_old_end is None or index_of_old_end < index_of_old_start:
             if VERBOSE_EXPAND > 0:
                 print("cannot find old start and end indices on rev strand")
-                for i, match in enumerate(new_matches):
-                    mark = "   "
-                    if i in (index_of_old_start, index_of_old_end):
-                        mark = " ->"
-                    if i in (index_of_new_start, index_of_new_end):
-                        mark = " =>"
-                    print(f" {mark} {match.target_start}, {match.target_end}, {match.query_start}, {match.query_end}")
+                print_matches(new_matches, index_of_old_start, index_of_old_end, index_of_new_start, index_of_new_end)
             return None
   
     # sanity check - if we cannot collate what we think are the old matches,
     # that means what we think are the old matches are likely repeats of the
     # same match so we can just stop
 
-    if not ProteinHit.can_collate_from_matches(new_matches[index_of_old_start:index_of_old_end+1]):
+    if VERBOSE_EXPAND > 1:
+        print("newly matched:")
+        print_matches(new_matches, index_of_old_start, index_of_old_end, index_of_new_start, index_of_new_end)
+
+    if not ProteinHit.can_collate_from_matches(new_matches[index_of_old_start:index_of_old_end+1], VERBOSE_EXPAND > 1):
         if VERBOSE_EXPAND > 0:
             print("sticking with the old matches", index_of_old_start, index_of_old_end)
         return None
  
     # move starting index as far back as we can
     index_of_new_start = index_of_old_start
-    i = index_of_old_start-1
+    i = index_of_old_start - 1
     while i >= 0:
-        if ProteinHit.can_collate_from_matches(new_matches[i:index_of_old_end+1]):
+        if ProteinHit.can_collate_from_matches(new_matches[i:index_of_old_end+1], VERBOSE_EXPAND > 1):
             index_of_new_start = i
             i -= 1
         else:
@@ -123,9 +125,9 @@ def find_more_matches_at_locus(
     
     # move ending index as far forward as we can
     index_of_new_end = index_of_old_end
-    i = index_of_old_end+1
-    while i <= len(new_matches)-1:
-        if ProteinHit.can_collate_from_matches(new_matches[index_of_old_start:i+1]):
+    i = index_of_old_end + 1
+    while i+1 <= len(new_matches):
+        if ProteinHit.can_collate_from_matches(new_matches[index_of_old_start:i+1], VERBOSE_EXPAND > 1):
             index_of_new_end = i
             i += 1
         else:
@@ -133,13 +135,7 @@ def find_more_matches_at_locus(
 
     if VERBOSE_EXPAND > 1:
         print("found:")
-        for i, match in enumerate(new_matches):
-            mark = "  "
-            if i in (index_of_old_start, index_of_old_end):
-                mark = "->"
-            if i in (index_of_new_start, index_of_new_end):
-                mark = "=>"
-            print(f"  {mark} {match.target_start}, {match.target_end}, {match.query_start}, {match.query_end}")
+        print_matches(new_matches, index_of_old_start, index_of_old_end, index_of_new_start, index_of_new_end)
 
     return new_matches[index_of_new_start:index_of_new_end+1]
 
@@ -170,6 +166,11 @@ def hmm_expand_protein(protein_hit, genomic_sequence_dict, hmm_file, threshold =
     )
 
     if new_matches is None:
+        match_total_score = sum([m.query_len() for m in protein_hit.matches])/2
+        if match_total_score < threshold:
+            if VERBOSE_EXPAND > 0:
+                print(f"{query_accession} on {target_accession}, {target_left}-{target_right}, score {match_total_score} not meeting threshold {threshold}")
+            return None
         return protein_hit
 
     if threshold:

@@ -41,6 +41,9 @@ def main():
 
     res = Results(args.hmm_search_results_tsv, target_fasta_path=args.fna_file)
     protein_matches = group_matches(res.matches())
+
+    # protein_matches = [m for m in protein_matches if m.target_accession == "NW_018148504.1" and m.query_accession == "K05469"]
+
     accession_ids = [pm.query_accession for pm in protein_matches]
     hmm_collection = HMMCollection(args.hmm_file, accession_ids)
 
