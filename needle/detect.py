@@ -181,7 +181,6 @@ class Results:
             target_start=sstart,
             target_end=send,
             e_value=float(evalue_str.replace(",", "")) if evalue_str else None,
-            identity=float(pident_str.replace(",", "")) if pident_str else None,
             matched_sequence=matched_seq,
         )
         return match

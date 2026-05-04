@@ -19,7 +19,6 @@ class Match:  # does not support matches across circular boundary
     target_start: int  # 1-based, 5' to 3', so target_start > target_end on reverse strand
     target_end: int    # 1-based, 5' to 3', so target_start > target_end on reverse strand
     e_value: float
-    identity: float
     matched_sequence: Optional[str] = None
     target_sequence: Optional[str] = None  # 5' to 3'
     score: Optional[float] = None
@@ -53,6 +52,122 @@ def remove_duplicate_matches(matches: List[Match]) -> List[Match]:
     for k,group in itertools.groupby(matches, keyf):
         retained.append(list(group)[0])
     return retained
+
+
+class Reason(object):
+
+    def __init__(self):
+        self.reason = None
+
+    def is(self, msg):
+        self.reason = msg
+
+
+@dataclass
+class MatchGraphNode(object):
+    match: Match
+    successors: List[MatchGraphNode]
+
+    def is_pred_of(self_left_node, right_node, reason):
+
+        if len(self_left_node.successors) > 0:
+            return False
+
+        left = self_left_node.match
+        right = right_node.match
+
+        # matches should be on same strand
+        if left.on_reverse_strand != right.on_reverse_strand:
+            reason.is("Matches are on different strands")
+            return False
+
+        # query cannot contain each other
+        if right.query_end <= left.query_end:
+            msg = "Matching queries contain each other (%s %s-%s and %s-%s)" % \
+                    (left.target_accession, left.query_start, left.query_end, right.query_start, right.query_end)
+            reason.is(msg)
+            return False
+
+        if (left.on_reverse_strand is False and left.target_start > right.target_start) or \
+           (left.on_reverse_strand is True and left.target_start < right.target_start):
+            msg = "Consecutive query matches are reversed on DNA, new copy? (%s, %s, rev strand %s, dna %s-%s (hmm %s-%s %s) and %s-%s (hmm %s-%s %s))" % \
+                    (left.query_accession, left.target_accession, left.on_reverse_strand,
+                     left.target_start, left.target_end, left.query_start, left.query_end, left.e_value,
+                     right.target_start, right.target_end, right.query_start, right.query_end, right.e_value)
+            reason.is(msg)
+            return False
+
+	# left cannot contain right on target
+        if (left.on_reverse_strand is False and right.target_end < left.target_end) or \
+           (left.on_reverse_strand is True and right.target_end > left.target_end):
+            msg = "DNA matches contain each other"
+            reason.is(msg)
+            return False
+
+        # query overlap not bigger than either left or right sequence
+
+        query_overlap_len = max(0, left.query_end - right.query_start + 1)
+        if query_overlap_len > len(left.target_sequence_translated()) or \
+           query_overlap_len > len(right.target_sequence_translated()):
+            msg = "Overlap larger than matched sequence"
+            reason.is(msg)
+            return False
+
+        return True
+
+
+def build_graph(matches):
+
+    graph = nx.DiGraph()
+    possible_leafs = []
+
+    matches = sorted(matches, key=lambda m: (m.query_start, m.query_end))
+
+    for match in matches:
+        node = MatchGraphNode(match=match, successors=[])
+
+        found_pred = False
+        new_possible_leafs = []
+
+        for leaf in possible_leafs:
+            if leaf.is_pred_of(node):
+                leaf.successors.append(node)
+                graph.add_edge(leaf, node)
+                found_pred = True
+                if node not in new_possible_leafs:
+                    new_possible_leafs.append(node)
+            else:
+               new_possible_leafs.append(leaf)
+
+        if not found_pred:
+            graph.add_node(node)
+            new_possible_leafs.append(node)
+
+        possible_leafs = new_possible_leafs
+
+    return graph
+
+
+def graph_paths(graph):
+
+    roots = [n for n, d in graph.in_degree() if d == 0]
+    leaves = [n for n, d in graph.out_degree() if d == 0]
+
+    all_paths = []
+    for root in roots:
+        paths = nx.all_simple_paths(G, source=root, target=leaves)
+        all_paths.extend(paths)
+
+    return all_paths
+
+
+def separate_match_lists(matches):
+    graph = build_graph(matches)
+    paths = graph_paths(graph)
+    return [
+        [n.match for n in p]
+        for p in paths
+    ]
 
 
 def order_matches(matches: List[Match], cleanup: bool = False) -> List[Match]:
