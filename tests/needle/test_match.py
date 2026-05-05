@@ -4,18 +4,153 @@ import unittest
 import random
 
 from needle.match import group_matches, ProteinHit, Match, order_matches_for_junctions, NonlinearMatchException
+from needle.match import Reason, match_is_pred_of, build_graph, graph_paths
 
 
-class TestOrderGroupMatches(unittest.TestCase):
+class TesterBase(unittest.TestCase):
 
     @staticmethod
     def makeM(query_start, query_end, target_start, target_end, query_accession=None, target_accession=None):
         return Match(
-            query_accession=query_accession, target_accession=target_accession,
-            e_value=0, identity=None,
+            query_accession=query_accession, target_accession=target_accession, e_value=0,
             query_start=query_start, query_end=query_end, target_start=target_start, target_end=target_end,
             target_sequence="A"*(abs(target_end-target_start)+1)
         )
+
+
+class TestIsPred(TesterBase):
+
+    def test_match_is_pred_of(self):
+        m1 = self.makeM(1, 10, 1, 30)
+        m2 = self.makeM(8, 15, 24, 45)
+        m3 = self.makeM(18, 20, 60, 66)
+
+        r = Reason()
+        self.assertEqual(match_is_pred_of(m1, m2, r), True)
+        self.assertEqual(match_is_pred_of(m2, m3, r), True)
+        self.assertEqual(match_is_pred_of(m1, m3, r), True)
+        self.assertEqual(match_is_pred_of(m3, m2, r), False)
+
+    def test_not_pred_if_target_coordinates_contained_but_query_not(self):
+        # aaaaaaaaa
+        #      bbb
+
+        m1 = self.makeM(1, 10, 30, 60)
+        m2 = self.makeM(6, 11, 33, 65)
+
+        r = Reason()
+        self.assertEqual(match_is_pred_of(m1, m2, r), True)
+
+        m2 = self.makeM(6, 11, 33, 45)
+        self.assertEqual(match_is_pred_of(m1, m2, r), False)
+        self.assertEqual(r.reason, "DNA matches contain each other")
+
+    def test_not_pred_if_target_coordinates_contained_on_reverse_strand_but_query_not(self):
+        # aaaaaaaaa
+        #      bbb
+
+        m1 = self.makeM(1, 10, 60, 31)
+        m2 = self.makeM(6, 11, 59, 43)
+
+        r = Reason()
+        self.assertEqual(match_is_pred_of(m1, m2, r), False)
+        self.assertEqual(r.reason, "DNA matches contain each other")
+
+    def test_not_pred_on_contained_match(self):
+        # aaaaaaaaa
+        #      bbbbbbbbbbb
+        #            ccc
+        #                ddd
+
+        m1 = self.makeM(1, 10, 1, 30)
+        m2 = self.makeM(6, 16, 16, 48)
+        m3 = self.makeM(12, 14, 34, 42)
+        m4 = self.makeM(16, 18, 46, 54)
+
+        r = Reason()
+        self.assertEqual(match_is_pred_of(m1, m2, r), True)
+        self.assertEqual(match_is_pred_of(m2, m3, r), False)
+        self.assertEqual(match_is_pred_of(m1, m3, r), True)
+        self.assertEqual(match_is_pred_of(m3, m4, r), True)
+        self.assertEqual(match_is_pred_of(m2, m4, r), True)
+
+    def test_not_pred_if_query_coordinates_do_not_align_with_target_coordinates(self):
+
+        m1 = self.makeM(1, 10, 1, 30)
+        m2 = self.makeM(6, 16, 48, 30)
+
+        r = Reason()
+        self.assertEqual(match_is_pred_of(m1, m2, r), False)
+        self.assertEqual(r.reason, "Matches are on different strands")
+
+    def test_not_pred_if_query_order_is_not_same_as_target_order(self):
+
+        m1 = self.makeM(1, 10, 31, 60)
+        m2 = self.makeM(6, 16, 1, 30)
+
+        r = Reason()
+        self.assertEqual(match_is_pred_of(m1, m2, r), False)
+        self.assertEqual(r.reason.startswith("Consecutive query matches are reversed"), True)
+
+    def test_not_pred_if_query_overlap_is_larger_than_left_or_right_sequence(self):
+
+        m1 = self.makeM(6, 16, 1, 10)   # there are deletions of query aa on DNA
+        m2 = self.makeM(10, 20, 15, 40)
+
+        r = Reason()
+        self.assertEqual(match_is_pred_of(m1, m2, r), False)
+        self.assertEqual(r.reason.startswith("Overlap larger than matched"), True)
+
+        m1 = self.makeM(6, 16, 1, 30)
+        m2 = self.makeM(10, 20, 15, 33)  # there are deletions of query aa on DNA
+
+        self.assertEqual(match_is_pred_of(m1, m2, r), False)
+        self.assertEqual(r.reason.startswith("Overlap larger than matched"), True)
+
+
+class TestGraphPaths(TesterBase):
+
+    def test_produces_single_path_if_matches_are_successors(self):
+        m1 = self.makeM(1, 10, 1, 30)
+        m2 = self.makeM(8, 15, 24, 45)
+        m3 = self.makeM(18, 20, 60, 66)
+
+        graph = build_graph([m1, m2, m3])
+        paths = graph_paths(graph)
+        self.assertEqual(len(paths), 1)
+        self.assertEqual(paths[0], [m1, m2, m3])
+
+    def __test_produces_multiple_paths_if_matches_are_not_successors(self):
+        pass
+
+    def __test_not_pred_if_junctions_overlap(self):
+        # aaaaaaaa
+        #      bbbbbb
+        #        cccccccc
+
+        m1 = self.makeM(1, 8,  1, 24)
+        m2 = self.makeM(6, 12, 16, 36)
+        m3 = self.makeM(8, 16, 22, 48)
+
+        with self.assertRaisesRegex(NonlinearMatchException, "Junctions overlap"):
+            pairs = order_matches_for_junctions([m1, m3, m2])  # input not in order
+
+    def __test_order_throws_error_on_contained_match(self):
+        # aaaaaaaaa
+        #      bbbbbbbbbbb
+        #            ccc
+        #                ddd
+
+        m1 = self.makeM(1, 10, 1, 30)
+        m2 = self.makeM(6, 16, 16, 48)
+        m3 = self.makeM(12, 14, 34, 42)
+        m4 = self.makeM(16, 18, 46, 54)
+
+        with self.assertRaisesRegex(NonlinearMatchException, "Matching queries contain each other"):
+            pairs = order_matches_for_junctions([m1, m4, m3, m2])  # input not in order
+
+
+class TestOrderGroupMatches(TesterBase):
 
     def test_order_matches_for_junctions_overlap_and_gap(self):
         m1 = self.makeM(1, 10, 1, 30)

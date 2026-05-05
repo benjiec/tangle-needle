@@ -34,7 +34,6 @@ class TestParseDetectResults(unittest.TestCase):
             self.assertEqual(m.query_accession, "Q1")
             self.assertEqual(m.target_accession, "S1")
             self.assertAlmostEqual(m.e_value, 1e-5, places=12)
-            self.assertAlmostEqual(m.identity, 99.9, places=3)
             self.assertEqual(m.query_start, 2)
             self.assertEqual(m.query_end, 5)
             self.assertEqual(m.target_start, 10)

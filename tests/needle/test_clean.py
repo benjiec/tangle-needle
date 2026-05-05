@@ -136,7 +136,7 @@ class TestCleaningSequenceWithHMM(unittest.TestCase):
     @staticmethod
     def makeM(query_start, query_end, target_start, target_end):
         return Match(
-            query_accession=None, target_accession=None, e_value=0, identity=None,
+            query_accession=None, target_accession=None, e_value=0,
             query_start=query_start, query_end=query_end, target_start=target_start, target_end=target_end,
             target_sequence="A"*(abs(target_start-target_end)+1))
 

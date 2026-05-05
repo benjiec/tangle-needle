@@ -55,7 +55,6 @@ def find_more_matches_at_locus(
             target_start=hmm_row["ali_from"],
             target_end=hmm_row["ali_to"],
             e_value=hmm_row["dom_evalue"],
-            identity=None,
             target_sequence=target_sequence,
             matched_sequence=hmm_row["matched_sequence"],
             score=hmm_row["dom_score"]
