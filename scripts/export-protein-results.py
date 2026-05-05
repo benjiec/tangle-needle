@@ -40,11 +40,9 @@ def main():
     args = parser.parse_args()
 
     res = Results(args.hmm_search_results_tsv, target_fasta_path=args.fna_file)
-    protein_matches = group_matches(res.matches())
+    clusters = group_matches(res.matches())
 
-    # protein_matches = [m for m in protein_matches if m.target_accession == "NW_018148504.1" and m.query_accession == "K05469"]
-
-    accession_ids = [pm.query_accession for pm in protein_matches]
+    accession_ids = [cluster[0].query_accession for cluster in clusters]
     hmm_collection = HMMCollection(args.hmm_file, accession_ids)
 
     try:
@@ -63,7 +61,7 @@ def main():
             thresholds = build_thresholds_dict(args.threshold_file, args.threshold_frac)
 
         protein_matches = hmm_expand(
-            protein_matches,
+            clusters,
             res._target_sequences_by_accession,
             hmm_collection,
             thresholds = thresholds,

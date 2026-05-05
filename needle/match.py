@@ -316,18 +316,17 @@ class ProteinHit:
         return first.target_accession
 
 
-def group_matches(all_matches, max_intron_length: int = 10_000, max_overlap_len: int = MAX_AA_OVERLAP_GROUPING) -> List[ProteinHit]:
+def group_matches(all_matches, max_intron_length: int = 10_000, max_overlap_len: int = MAX_AA_OVERLAP_GROUPING) -> List[List[Match]]:
     """
-    Group Match objects into ProteinHit objects.
-    - Groups by (query_accession, target_accession)
-    - Within a (query, target) group, further splits into clusters if adjacent
-      matches on the target are separated by more than max_intron_length.
+    cluster Match objects
+      - groups by (query_accession, target_accession)
+      - within a (query, target) group, further splits into clusters if adjacent
+        matches on the target are separated by more than max_intron_length.
     """
 
     if not all_matches:
         return []
 
-    # Helper to get interval on target chromosome (normalize orientation)
     def target_interval(m: Match) -> (int, int):
         return (min(m.target_start, m.target_end), max(m.target_start, m.target_end))
 
@@ -336,7 +335,7 @@ def group_matches(all_matches, max_intron_length: int = 10_000, max_overlap_len:
         key = (m.query_accession, m.target_accession, m.on_reverse_strand)
         grouped.setdefault(key, []).append(m)
 
-    protein_hits: List[ProteinHit] = []
+    final_clusters = []
 
     for (query_id, target_id, on_reverse_strand), group in grouped.items():
         # Sort by target interval start to create distance-based clusters
@@ -414,39 +413,8 @@ def group_matches(all_matches, max_intron_length: int = 10_000, max_overlap_len:
         if current_cluster:
             clusters.append(current_cluster)
 
-        # Build ProteinHit objects for each cluster
         for cluster in clusters:
-            # For boolean computations, sort by query_start
-            cluster_by_query = sorted(cluster, key=lambda m: (m.query_start, m.query_end))
+            cluster = remove_duplicate_matches(cluster)
+            final_clusters.append(cluster)
 
-            # Aggregate min/max coordinates
-            q_min = min(m.query_start for m in cluster)
-            q_max = max(m.query_end for m in cluster)
-            t_min = min(target_interval(m)[0] for m in cluster)
-            t_max = max(target_interval(m)[1] for m in cluster)
-
-            # all matches within a cluster are on the same strand
-            on_reverse_strand = cluster[0].on_reverse_strand
-            if on_reverse_strand:
-                pm_t_start, pm_t_end = t_max, t_min  # 5'->3' on reverse: higher coord to lower coord
-            else:
-                pm_t_start, pm_t_end = t_min, t_max
-
-            cluster_by_query = remove_duplicate_matches(cluster_by_query)
-            try:
-                cluster_by_query = order_matches(cluster_by_query)
-            except NonlinearMatchException as e:
-                # will handle error later, if cannot cleanup
-                pass
-
-            protein_hits.append(
-                ProteinHit(
-                    matches=cluster_by_query,
-                    query_start=q_min,
-                    query_end=q_max,
-                    target_start=pm_t_start,
-                    target_end=pm_t_end
-                )
-            )
-
-    return protein_hits
+    return final_clusters

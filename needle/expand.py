@@ -1,5 +1,5 @@
 from .sequence import extract_subsequence_strand_sensitive
-from .match import Match, ProteinHit
+from .match import Match, ProteinHit, build_graph, graph_paths
 from .detect import hmm_search_genome
 
 VERBOSE_EXPAND = 0
@@ -18,8 +18,6 @@ def print_matches(matches, index_of_old_start, index_of_old_end, index_of_new_st
 def find_more_matches_at_locus(
   query_accession,
   hmm_file,
-  old_start,
-  old_end,
   target_full_sequence,
   target_accession,
   target_left,
@@ -62,91 +60,22 @@ def find_more_matches_at_locus(
         assert match.matched_sequence == match.target_sequence_translated()
         new_matches.append(match)
 
-    index_of_old_start = None
-    index_of_old_end = None
-    index_of_new_start = None
-    index_of_new_end = None
+    return new_matches
+
+
+def hmm_expand_protein(matches, genomic_sequence_dict, hmm_file, threshold = None, cpus = None, hmm_rows = None):
+
+    target_full_sequence = genomic_sequence_dict[matches[0].target_accession]
+    query_accession = matches[0].query_accession
+    target_accession = matches[0].target_accession
+    strand = -1 if matches[0].on_reverse_strand else 1
 
     if strand > 0:
-        new_matches = sorted(new_matches, key=lambda m: m.target_start)
-        for i, match in enumerate(new_matches):
-            if match.target_end > old_start and index_of_old_start is None:
-                index_of_old_start = i
-            if match.target_end >= old_end and index_of_old_end is None:
-                index_of_old_end = i
-        if index_of_old_end is None and index_of_old_start is not None:
-            index_of_old_end = len(new_matches)-1
-
-        if index_of_old_start is None or index_of_old_end is None or index_of_old_end < index_of_old_start:
-            if VERBOSE_EXPAND > 0:
-                print("cannot find old start and end indices on fwd strand")
-                print_matches(new_matches, index_of_old_start, index_of_old_end, index_of_new_start, index_of_new_end)
-            return None
-
+        start = min([m.target_start for m in matches])
+        end = max([m.target_end for m in matches])
     else:
-        new_matches = sorted(new_matches, key=lambda m: -m.target_start)
-        for i, match in enumerate(new_matches):
-            if match.target_end < old_start and index_of_old_start is None:
-                index_of_old_start = i
-            elif match.target_end <= old_end and index_of_old_end is None:
-                index_of_old_end = i
-        if index_of_old_end is None and index_of_old_start is not None:
-            index_of_old_end = len(new_matches)-1
-
-        if index_of_old_start is None or index_of_old_end is None or index_of_old_end < index_of_old_start:
-            if VERBOSE_EXPAND > 0:
-                print("cannot find old start and end indices on rev strand")
-                print_matches(new_matches, index_of_old_start, index_of_old_end, index_of_new_start, index_of_new_end)
-            return None
-  
-    # sanity check - if we cannot collate what we think are the old matches,
-    # that means what we think are the old matches are likely repeats of the
-    # same match so we can just stop
-
-    if VERBOSE_EXPAND > 1:
-        print("newly matched:")
-        print_matches(new_matches, index_of_old_start, index_of_old_end, index_of_new_start, index_of_new_end)
-
-    if not ProteinHit.can_collate_from_matches(new_matches[index_of_old_start:index_of_old_end+1], VERBOSE_EXPAND > 1):
-        if VERBOSE_EXPAND > 0:
-            print("sticking with the old matches", index_of_old_start, index_of_old_end)
-        return None
- 
-    # move starting index as far back as we can
-    index_of_new_start = index_of_old_start
-    i = index_of_old_start - 1
-    while i >= 0:
-        if ProteinHit.can_collate_from_matches(new_matches[i:index_of_old_end+1], VERBOSE_EXPAND > 1):
-            index_of_new_start = i
-            i -= 1
-        else:
-            break
-    
-    # move ending index as far forward as we can
-    index_of_new_end = index_of_old_end
-    i = index_of_old_end + 1
-    while i+1 <= len(new_matches):
-        if ProteinHit.can_collate_from_matches(new_matches[index_of_old_start:i+1], VERBOSE_EXPAND > 1):
-            index_of_new_end = i
-            i += 1
-        else:
-            break
-
-    if VERBOSE_EXPAND > 1:
-        print("found:")
-        print_matches(new_matches, index_of_old_start, index_of_old_end, index_of_new_start, index_of_new_end)
-
-    return new_matches[index_of_new_start:index_of_new_end+1]
-
-
-def hmm_expand_protein(protein_hit, genomic_sequence_dict, hmm_file, threshold = None, cpus = None, hmm_rows = None):
-
-    target_full_sequence = genomic_sequence_dict[protein_hit.target_accession]
-    query_accession = protein_hit.matches[0].query_accession
-    target_accession = protein_hit.matches[0].target_accession
-    strand = -1 if protein_hit.matches[0].on_reverse_strand else 1
-    start = protein_hit.target_start
-    end = protein_hit.target_end
+        start = max([m.target_start for m in matches])
+        end = min([m.target_end for m in matches])
 
     max_search_distance = 30000
     target_left = max(min(start, end) - max_search_distance, 1)
@@ -158,57 +87,59 @@ def hmm_expand_protein(protein_hit, genomic_sequence_dict, hmm_file, threshold =
             print(f" old {match.target_start}, {match.target_end}, {match.query_start}, {match.query_end}")
 
     new_matches = find_more_matches_at_locus(
-        query_accession, hmm_file, start, end,
-        target_full_sequence, target_accession, target_left, target_right, strand,
+        query_accession, hmm_file, target_full_sequence, target_accession, target_left, target_right, strand,
         cpus = cpus,
         hmm_rows = hmm_rows
     )
 
     if new_matches is None:
-        match_total_score = sum([m.query_len() for m in protein_hit.matches])/2
-        if match_total_score < threshold:
-            if VERBOSE_EXPAND > 0:
-                print(f"{query_accession} on {target_accession}, {target_left}-{target_right}, score {match_total_score} not meeting threshold {threshold}")
-            return None
-        return protein_hit
+        return []
 
-    if threshold:
-        match_total_score = sum([m.score for m in new_matches])
-        if match_total_score < threshold:
-            if VERBOSE_EXPAND > 0:
-                print(f"{query_accession} on {target_accession}, {target_left}-{target_right}, score {match_total_score} not meeting threshold {threshold}")
-            return None
+    graph = build_graph(new_matches)
+    paths = graph_paths(graph)
+    proteins = []
 
-    new_pm = ProteinHit(
-        matches=new_matches,
-        query_start=min(m.query_start for m in new_matches),
-        query_end=max(m.query_end for m in new_matches),
-        target_start=min(m.target_start for m in new_matches) if protein_hit.target_start < protein_hit.target_end else max(m.target_start for m in new_matches),
-        target_end=max(m.target_end for m in new_matches) if protein_hit.target_start < protein_hit.target_end else min(m.target_end for m in new_matches),
-        hmm_file=hmm_file
-    )
+    for path in paths:
 
-    return new_pm
+        if threshold:
+            match_total_score = sum([m.score for m in path])
+            if match_total_score < threshold:
+                if VERBOSE_EXPAND > 0:
+                    print(f"{query_accession} on {target_accession}, {target_left}-{target_right}, score {match_total_score} not meeting threshold {threshold}")
+                continue
+
+        protein = ProteinHit(
+            matches=path,
+            query_start=min(m.query_start for m in path),
+            query_end=max(m.query_end for m in path),
+            target_start=min(m.target_start for m in path) if strand > 0 else max(m.target_start for m in path),
+            target_end=max(m.target_end for m in path) if strand > 0 else min(m.target_end for m in path),
+            hmm_file=hmm_file
+        )
+        proteins.append(protein)
+
+    return proteins
 
 
-def hmm_expand(protein_hits, genomic_sequence_dict, hmm_collection, thresholds = None, cpus = None):
+def hmm_expand(clusters, genomic_sequence_dict, hmm_collection, thresholds = None, cpus = None):
     new_protein_hits = {}
 
     skipped = []
-    for pm in protein_hits:
-        hmm_profile = hmm_collection.get(pm.query_accession)
+    for cluster in clusters:
+        cluster_query_accession = cluster[0].query_accession
+        hmm_profile = hmm_collection.get(cluster_query_accession)
         if hmm_profile is None:
-            if pm.query_accession not in skipped:
-                skipped.append(pm.query_accession)
-                print("skipping", pm.query_accession, "cannot find HMM profile")
+            if cluster_query_accession not in skipped:
+                skipped.append(cluster_query_accession)
+                print("skipping", cluster_query_accession, "cannot find HMM profile")
         else:
             threshold = None
-            if thresholds and pm.query_accession in thresholds:
-                threshold = thresholds[pm.query_accession]
+            if thresholds and cluster_query_accession in thresholds:
+                threshold = thresholds[cluster_query_accession]
                 if VERBOSE_EXPAND > 1:
-                    print("using", threshold, "as threshold for", pm.query_accession)
-            pm = hmm_expand_protein(pm, genomic_sequence_dict, hmm_profile, threshold = threshold, cpus = cpus)
-            if pm:
-                new_protein_hits[pm.protein_hit_id] = pm
+                    print("using", threshold, "as threshold for", cluster_query_accession)
+            proteins = hmm_expand_protein(cluster, genomic_sequence_dict, hmm_profile, threshold = threshold, cpus = cpus)
+            for protein in proteins:
+                new_protein_hits[protein.protein_hit_id] = protein
 
     return list(new_protein_hits.values())
