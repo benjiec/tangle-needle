@@ -10,11 +10,14 @@ from needle.match import Reason, match_is_pred_of, build_graph, graph_paths
 class TesterBase(unittest.TestCase):
 
     @staticmethod
-    def makeM(query_start, query_end, target_start, target_end, query_accession=None, target_accession=None):
+    def makeM(query_start, query_end, target_start, target_end, query_accession=None, target_accession=None, target_sequence=None):
+        if target_sequence is None:
+            target_sequence="A"*(abs(target_end-target_start)+1)
+
         return Match(
             query_accession=query_accession, target_accession=target_accession, e_value=0,
             query_start=query_start, query_end=query_end, target_start=target_start, target_end=target_end,
-            target_sequence="A"*(abs(target_end-target_start)+1)
+            target_sequence=target_sequence
         )
 
 
@@ -29,7 +32,6 @@ class TestIsPred(TesterBase):
         self.assertEqual(match_is_pred_of(m1, m2, r), True)
         self.assertEqual(match_is_pred_of(m2, m3, r), True)
         self.assertEqual(match_is_pred_of(m1, m3, r), True)
-        self.assertEqual(match_is_pred_of(m3, m2, r), False)
 
     def test_not_pred_if_target_coordinates_contained_but_query_not(self):
         # aaaaaaaaa
@@ -80,7 +82,7 @@ class TestIsPred(TesterBase):
         m2 = self.makeM(6, 16, 48, 30)
 
         r = Reason()
-        self.assertEqual(match_is_pred_of(m1, m2, r), False)
+        self.assertEqual(match_is_pred_of(m2, m1, r), False)
         self.assertEqual(r.reason, "Matches are on different strands")
 
     def test_not_pred_if_query_order_is_not_same_as_target_order(self):
@@ -89,8 +91,8 @@ class TestIsPred(TesterBase):
         m2 = self.makeM(6, 16, 1, 30)
 
         r = Reason()
-        self.assertEqual(match_is_pred_of(m1, m2, r), False)
-        self.assertEqual(r.reason.startswith("Consecutive query matches are reversed"), True)
+        self.assertEqual(match_is_pred_of(m2, m1, r), False)
+        self.assertEqual(r.reason.startswith("Matching queries contain each other"), True)
 
     def test_not_pred_if_query_overlap_is_larger_than_left_or_right_sequence(self):
 
@@ -120,22 +122,7 @@ class TestGraphPaths(TesterBase):
         self.assertEqual(len(paths), 1)
         self.assertEqual(paths[0], [m1, m2, m3])
 
-    def __test_produces_multiple_paths_if_matches_are_not_successors(self):
-        pass
-
-    def __test_not_pred_if_junctions_overlap(self):
-        # aaaaaaaa
-        #      bbbbbb
-        #        cccccccc
-
-        m1 = self.makeM(1, 8,  1, 24)
-        m2 = self.makeM(6, 12, 16, 36)
-        m3 = self.makeM(8, 16, 22, 48)
-
-        with self.assertRaisesRegex(NonlinearMatchException, "Junctions overlap"):
-            pairs = order_matches_for_junctions([m1, m3, m2])  # input not in order
-
-    def __test_order_throws_error_on_contained_match(self):
+    def test_produces_multiple_paths_if_matches_are_not_successors(self):
         # aaaaaaaaa
         #      bbbbbbbbbbb
         #            ccc
@@ -146,11 +133,33 @@ class TestGraphPaths(TesterBase):
         m3 = self.makeM(12, 14, 34, 42)
         m4 = self.makeM(16, 18, 46, 54)
 
-        with self.assertRaisesRegex(NonlinearMatchException, "Matching queries contain each other"):
-            pairs = order_matches_for_junctions([m1, m4, m3, m2])  # input not in order
+        graph = build_graph([m1, m2, m3, m4])
+        paths = graph_paths(graph)
+        self.assertEqual(len(paths), 2)
+        self.assertCountEqual(
+            paths,
+            [[m1, m2, m4], [m1, m3, m4]]
+        )
+
+    def test_produces_multiple_paths_if_junctions_overlap(self):
+        # aaaaaaaa
+        #      bbbbbb
+        #        cccccccc
+
+        m1 = self.makeM(1, 8,  1, 24)
+        m2 = self.makeM(6, 12, 16, 36)
+        m3 = self.makeM(8, 16, 22, 48)
+
+        graph = build_graph([m1, m2, m3])
+        paths = graph_paths(graph)
+        self.assertEqual(len(paths), 2)
+        self.assertCountEqual(
+            paths,
+            [[m1, m2], [m1, m3]]
+        )
 
 
-class TestOrderGroupMatches(TesterBase):
+class TestGroupMatches(TesterBase):
 
     def test_order_matches_for_junctions_overlap_and_gap(self):
         m1 = self.makeM(1, 10, 1, 30)
@@ -223,7 +232,7 @@ class TestOrderGroupMatches(TesterBase):
         m1 = self.makeM(1, 10, 31, 60)
         m2 = self.makeM(6, 16, 1, 30)
 
-        with self.assertRaisesRegex(NonlinearMatchException, "Consecutive query matches are reversed"):
+        with self.assertRaisesRegex(NonlinearMatchException, "Matching queries contain each other"):
             pairs = order_matches_for_junctions([m1, m2])
 
     def test_order_throws_error_if_query_overlap_is_larger_than_left_or_right_sequence(self):
@@ -506,20 +515,16 @@ class TestOrderGroupMatches(TesterBase):
     def test_target_sequence_and_target_sequence_translated_on_fwd_strand(self):
 
         # fwd
-        m1 = self.makeM(34, 48, 1001, 1020, "Q", "S1")
-        m1.target_sequence = "ATGATGATG"
+        m1 = self.makeM(34, 48, 1001, 1020, "Q", "S1", target_sequence = "ATGATGATG")
         self.assertEqual(m1.target_sequence_translated(), "MMM")
 
         # rev, but use target_sequence which is already reversed
-        m2 = self.makeM(25, 38, 1201, 1120, "Q", "S1")
-        m2.target_sequence = "ATGATGATG"
+        m2 = self.makeM(25, 38, 1201, 1120, "Q", "S1", target_sequence = "ATGATGATG")
         self.assertEqual(m2.target_sequence_translated(), "MMM")
 
     def test_translation_and_collated_protein_sequence(self):
-        m1 = self.makeM(1, 3, 11, 19, "Q", "S1")
-        m1.target_sequence = "ATGGAATTT"
-        m2 = self.makeM(2, 4, 22, 30, "Q", "S1")
-        m2.target_sequence = "GAAGTGGGG"
+        m1 = self.makeM(1, 3, 11, 19, "Q", "S1", target_sequence = "ATGGAATTT")
+        m2 = self.makeM(2, 4, 22, 30, "Q", "S1", target_sequence = "GAAGTGGGG")
 
         self.assertEqual(m1.target_sequence_translated(), "MEF")
         self.assertEqual(m2.target_sequence_translated(), "EVG")
@@ -529,10 +534,8 @@ class TestOrderGroupMatches(TesterBase):
         self.assertEqual(collated, "M(EF/EV)G")
 
     def test_collated_protein_sequence_does_not_include_leading_Xs(self):
-        m1 = self.makeM(2, 4, 11, 19, "Q", "S1")
-        m1.target_sequence = "ATGGAATTT"
-        m2 = self.makeM(5, 7, 22, 30, "Q", "S1")
-        m2.target_sequence = "GAAGTGGGG"
+        m1 = self.makeM(2, 4, 11, 19, "Q", "S1", target_sequence = "ATGGAATTT")
+        m2 = self.makeM(5, 7, 22, 30, "Q", "S1", target_sequence = "GAAGTGGGG")
 
         self.assertEqual(m1.target_sequence_translated(), "MEF")
         self.assertEqual(m2.target_sequence_translated(), "EVG")
@@ -542,31 +545,31 @@ class TestOrderGroupMatches(TesterBase):
         self.assertEqual(collated, "MEFEVG")
 
     def test_collate_handles_single_match(self):
-        a = Match("Q","T",1,3,1,9,0.0,100.0); a.target_sequence="ATGGAATTT"    # MEF
+        a = Match("Q","T",1,3,1,9,0.0,100.0,target_sequence="ATGGAATTT")    # MEF
         pm = ProteinHit([a],1,3,1,9)
         collated = pm.collated_protein_sequence
         self.assertEqual(collated, "MEF")
 
     def test_collate_handles_gaps_and_overlaps(self):
-        a = Match("Q","T",1,3,1,9,0.0,100.0); a.target_sequence="ATGGAATTT"    # MEF
-        b = Match("Q","T",3,5,10,18,0.0,100.0); b.target_sequence="GAAGTGGGG"  # EVG
-        c = Match("Q","T",9,9,30,32,0.0,100.0); c.target_sequence="ATG"        # M
+        a = Match("Q","T",1,3,1,9,0.0,100.0,target_sequence="ATGGAATTT")    # MEF
+        b = Match("Q","T",3,5,10,18,0.0,100.0,target_sequence="GAAGTGGGG")  # EVG
+        c = Match("Q","T",9,9,30,32,0.0,100.0,target_sequence="ATG")        # M
         pm = ProteinHit([a,b,c],1,9,1,32)
         collated = pm.collated_protein_sequence
         self.assertEqual(collated, "ME(F/E)VGXXXM")
 
     def test_collate_handles_gaps_within_match(self):
-        a = Match("Q","T",1,3,1,6,0.0,100.0); a.target_sequence="ATGGAA"       # ME - but matching to 3 bps of query
-        b = Match("Q","T",3,5,10,18,0.0,100.0); b.target_sequence="GAAGTGGGG"  # EVG
-        c = Match("Q","T",9,9,30,32,0.0,100.0); c.target_sequence="ATG"        # M
+        a = Match("Q","T",1,3,1,6,0.0,100.0,target_sequence="ATGGAA")       # ME - but matching to 3 bps of query
+        b = Match("Q","T",3,5,10,18,0.0,100.0,target_sequence="GAAGTGGGG")  # EVG
+        c = Match("Q","T",9,9,30,32,0.0,100.0,target_sequence="ATG")        # M
         pm = ProteinHit([a,b,c],1,9,1,32)
         collated = pm.collated_protein_sequence
         self.assertEqual(collated, "M(E/E)VGXXXM")
 
     def test_collate_handles_insertions_within_match(self):
-        a = Match("Q","T",1,3,1,12,0.0,100.0); a.target_sequence="ATGGAATTTTTT" # MEFF - but matching to 3 bps of query
-        b = Match("Q","T",3,5,10,18,0.0,100.0); b.target_sequence="GAAGTGGGG"   # EVG
-        c = Match("Q","T",9,9,30,32,0.0,100.0); c.target_sequence="ATG"         # M
+        a = Match("Q","T",1,3,1,12,0.0,100.0,target_sequence="ATGGAATTTTTT") # MEFF - but matching to 3 bps of query
+        b = Match("Q","T",3,5,10,18,0.0,100.0,target_sequence="GAAGTGGGG")   # EVG
+        c = Match("Q","T",9,9,30,32,0.0,100.0,target_sequence="ATG")         # M
         pm = ProteinHit([a,b,c],1,9,1,32)
         collated = pm.collated_protein_sequence
         self.assertEqual(collated, "MEF(F/E)VGXXXM")

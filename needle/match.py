@@ -73,25 +73,31 @@ class Reason(object):
 
 
 def match_is_pred_of(left, right, reason):
+    """
+    returns True if left is a pred of right. requires left and right being
+    ordered by sortable_target_start, which is equivalent to saying they really
+    should be ordered by query coordinates.
+    """
+
+    assert left.sortable_target_start <= right.sortable_target_start
 
     # matches should be on same strand
     if left.on_reverse_strand != right.on_reverse_strand:
         reason.was("Matches are on different strands")
         return False
 
-    # query cannot contain each other
-    if right.query_end <= left.query_end:
-        msg = "Matching queries contain each other (%s %s-%s and %s-%s)" % \
-                (left.target_accession, left.query_start, left.query_end, right.query_start, right.query_end)
-        reason.was(msg)
-        return False
-
-    if (left.on_reverse_strand is False and left.target_start > right.target_start) or \
-       (left.on_reverse_strand is True and left.target_start < right.target_start):
+    if left.query_start > right.target_start:
         msg = "Consecutive query matches are reversed on DNA, new copy? (%s, %s, rev strand %s, dna %s-%s (hmm %s-%s %s) and %s-%s (hmm %s-%s %s))" % \
                 (left.query_accession, left.target_accession, left.on_reverse_strand,
                  left.target_start, left.target_end, left.query_start, left.query_end, left.e_value,
                  right.target_start, right.target_end, right.query_start, right.query_end, right.e_value)
+        reason.was(msg)
+        return False
+
+    # query cannot contain each other
+    if right.query_end <= left.query_end:
+        msg = "Matching queries contain each other (%s %s-%s and %s-%s)" % \
+                (left.target_accession, left.query_start, left.query_end, right.query_start, right.query_end)
         reason.was(msg)
         return False
 
@@ -114,7 +120,7 @@ def match_is_pred_of(left, right, reason):
     return True
 
 
-def build_graph(matches):
+def build_graph(matches, reasons = None):
 
     graph = nx.DiGraph()
     matches = sorted(matches, key=lambda m: (m.sortable_target_start, m.sortable_target_end))
@@ -124,13 +130,25 @@ def build_graph(matches):
     for match in matches:
         found_pred = False
 
-        # reverse iterate through prev match and stop at the first possible predecessor
         for possible_pred in prev_matches[::-1]:
+            # already linked
+            if graph.has_node(possible_pred) and \
+               graph.has_node(match) and \
+               nx.has_path(graph, possible_pred, match):
+                continue
+
             reason = Reason()
             if match_is_pred_of(possible_pred, match, reason):
-                graph.add_edge(possible_pred, match)
-                found_pred = True
-                break
+                ancestors = nx.ancestors(graph, possible_pred)
+                if len(ancestors) == 0 or \
+                   match.query_start > max([x.query_end for x in ancestors]):
+                    graph.add_edge(possible_pred, match)
+                    found_pred = True
+                elif reasons is not None:
+                   reason.was("Junctions overlap")
+                   reasons.append(reason)
+            elif reasons is not None:
+                reasons.append(reason)
 
         if not found_pred:
             graph.add_node(match)
@@ -153,95 +171,25 @@ def graph_paths(graph):
     return all_paths
 
 
-def separate_match_lists(matches):
-    graph = build_graph(matches)
-    paths = graph_paths(graph)
-    return [
-        [n.match for n in p]
-        for p in paths
-    ]
-
-
-def order_matches(matches: List[Match], cleanup: bool = False) -> List[Match]:
+def order_matches(matches: List[Match]) -> List[Match]:
     if not matches:
         return []
 
-    ordered = sorted(matches, key=lambda m: (m.query_start, m.query_end))
+    reasons = []
+    graph = build_graph(matches, reasons)
+    paths = graph_paths(graph)
+    if len(paths) != 1:
+        msg = "; ".join([r.reason for r in reasons])
+        raise NonlinearMatchException(msg)
 
-    i = 0
-    while i < len(ordered)-1:
-        left = ordered[i]
-        right = ordered[i + 1]
-        assert right.query_start >= left.query_start  # sort condition
-
-        # matches should be on same strand
-        if left.on_reverse_strand != right.on_reverse_strand:
-            raise NonlinearMatchException("Matches are on different strands")
-
-        # query cannot contain each other
-        if right.query_end <= left.query_end:
-            msg = "Matching queries contain each other (%s %s-%s and %s-%s)" % \
-                    (left.target_accession, left.query_start, left.query_end, right.query_start, right.query_end)
-            if cleanup:  # recoverable - remove right
-                # print(msg)
-                ordered = ordered[0:i+1]+ordered[i+2:]
-                continue
-            else:
-                raise NonlinearMatchException(msg)
-
-	# do the following AFTER removing contained matches: making sure
-	# ordered correctly on the target as well -- if ordered reverse on
-	# target, maybe it's a new copy of the gene? should NOT recover this.
-
-        if (left.on_reverse_strand is False and left.target_start > right.target_start) or \
-           (left.on_reverse_strand is True and left.target_start < right.target_start):
-            msg = "Consecutive query matches are reversed on DNA, new copy? (%s, %s, rev strand %s, dna %s-%s (hmm %s-%s %s) and %s-%s (hmm %s-%s %s))" % \
-                    (left.query_accession, left.target_accession, left.on_reverse_strand,
-                     left.target_start, left.target_end, left.query_start, left.query_end, left.e_value,
-                     right.target_start, right.target_end, right.query_start, right.query_end, right.e_value)
-            raise NonlinearMatchException(msg)
-
-        query_overlap_len = max(0, left.query_end - right.query_start + 1)
-
-	# left cannot contain right on target - we already checked the
-	# target_left coordinates are correct above
-        if (left.on_reverse_strand is False and right.target_end < left.target_end) or \
-           (left.on_reverse_strand is True and right.target_end > left.target_end):
-            msg = "DNA matches contain each other"
-            if cleanup:  # recoverable - remove right
-                # print(msg)
-                ordered = ordered[0:i+1]+ordered[i+2:]
-                continue
-            else:
-                raise NonlinearMatchException(msg)
-
-        # query overlap not bigger than either left or right sequence
-        if query_overlap_len > len(left.target_sequence_translated()) or \
-           query_overlap_len > len(right.target_sequence_translated()):
-            msg = "Overlap larger than matched sequence"
-            if cleanup:  # recoverable - remove smaller side
-                # print(msg)
-                if left.query_len() > right.query_len():
-                    ordered = ordered[0:i+1]+ordered[i+2:]
-                    continue
-                else:
-                    ordered = ordered[0:i]+ordered[i+1:]
-                    if i > 0:
-                        i = i-1
-                    continue
-            else:
-                raise NonlinearMatchException(msg)
-
-        i += 1
-
-    return ordered
+    return sorted(matches, key=lambda m: (m.query_start, m.query_end))
 
 
 def order_matches_for_junctions(matches: List[Match]) -> List[Tuple[Match, Match, int, int]]:
     if not matches:
         return []
 
-    ordered = order_matches(matches, cleanup = False)
+    ordered = order_matches(matches)
     pairs: List[Tuple[Match, Match, int, int]] = []
     junctions: List[Tuple[int, int]] = []
 
@@ -259,16 +207,6 @@ def order_matches_for_junctions(matches: List[Match]) -> List[Tuple[Match, Match
         else:
             junctions.append((right.query_start, left.query_end))
         i += 1
-
-    # none of the junctions should overlap, else we can't globally determine
-    # the best sequence at each junction
-
-    if len(junctions) > 1:
-        cur_right = junctions[0][1]
-        for left, right in junctions[1:]:
-            if left <= cur_right:
-                raise NonlinearMatchException(f"Junctions overlap: left {left}, cur_right {cur_right}")
-            cur_right = right
 
     return pairs
 
@@ -496,7 +434,7 @@ def group_matches(all_matches, max_intron_length: int = 10_000, max_overlap_len:
 
             cluster_by_query = remove_duplicate_matches(cluster_by_query)
             try:
-                cluster_by_query = order_matches(cluster_by_query, cleanup=True)
+                cluster_by_query = order_matches(cluster_by_query)
             except NonlinearMatchException as e:
                 # will handle error later, if cannot cleanup
                 pass
