@@ -6,7 +6,10 @@ from Bio.Seq import Seq
 import networkx as nx
 
 
-MAX_AA_OVERLAP = 8
+# it's possible to get matches with overlap at 8 aa or more, so setting this
+# too low will breakup proteins
+
+MAX_AA_OVERLAP = 10
 
 
 @dataclass(frozen=True)
@@ -173,7 +176,7 @@ def build_graph(matches, reasons = None, max_aa_overlap = MAX_AA_OVERLAP):
                     if max_descendant_query_end - match.query_start > max_aa_overlap and \
                        max_descendant_target_end < match.sortable_target_end:
                         if reasons is not None:
-                            reason.was(f"{possible_pred} already part of another path that overlaps with {match}")
+                            reason.was(f"potential pred {possible_pred} already part of another path that overlaps with {match}")
                             reasons.append(reason)
                         continue
 

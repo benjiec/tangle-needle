@@ -24,7 +24,7 @@ def find_more_matches_at_locus(query_accession, hmm_file, target_full_sequence, 
         return None
 
     new_matches = []
-    for hmm_row in hmm_rows:
+    for hmm_row in sorted(hmm_rows, key=lambda r: r["ali_from"]):
         target_sequence = extract_subsequence_strand_sensitive(target_full_sequence, hmm_row["ali_from"], hmm_row["ali_to"])
         match = Match(
             query_accession=query_accession,
@@ -78,10 +78,13 @@ def hmm_expand_protein(matches, genomic_sequence_dict, hmm_file, threshold = Non
     if new_matches is None:
         return []
 
-    graph = build_graph(new_matches)
+    reasons = []
+    graph = build_graph(new_matches, reasons)
     paths = graph_paths(graph)
     if VERBOSE_EXPAND > 1:
         print(f"  graph produced {len(paths)} paths")
+        for reason in reasons:
+            print(f"    {reason.reason}")
     proteins = []
 
     for path in paths:

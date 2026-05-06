@@ -209,7 +209,7 @@ class TestGraphPaths(TesterBase):
         m2 = self.makeM(20, 30, 70,  100)
         m3 = self.makeM(20, 30, 100, 130)
 
-        graph = build_graph([m1, m2, m3])
+        graph = build_graph([m1, m2, m3], max_aa_overlap = 8)
         paths = graph_paths(graph)
         self.assertEqual(len(paths), 2)
         self.assertCountEqual(
