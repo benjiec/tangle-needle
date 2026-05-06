@@ -2,7 +2,7 @@ from .sequence import extract_subsequence_strand_sensitive
 from .match import Match, ProteinHit, build_graph, graph_paths
 from .detect import hmm_search_genome
 
-VERBOSE_EXPAND = 2
+VERBOSE_EXPAND = 0
 MIN_AA_LENGTH = 8
 
 def find_more_matches_at_locus(query_accession, hmm_file, target_full_sequence, target_accession, target_left, target_right, strand, cpus=None, hmm_rows=None):
