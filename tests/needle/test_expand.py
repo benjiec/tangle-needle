@@ -1,5 +1,5 @@
 import unittest
-from needle.expand import find_more_matches_at_locus, hmm_expand_protein
+from needle.expand import hmm_expand_protein
 from needle.match import ProteinHit, Match
 
 
@@ -27,128 +27,86 @@ class TestLookingForProtein(unittest.TestCase):
 
     def test_finds_original_protein_on_fwd_strand_if_there_are_no_more_matches(self):
 
+        a = Match("Q", "T", 11, 20, 101, 130, 0.0, 100.0)
+        b = Match("Q", "T", 21, 30, 201, 230, 0.0, 100.0)
+
         rows = [
-            self.make_hmm_row(0.01, 10,  1, 10, 101, 130, "K"*10),
-            self.make_hmm_row(0.01, 10, 11, 20, 201, 230, "K"*10),
+            self.make_hmm_row(0.01, 10, 11, 20, 101, 130, "K"*10),
+            self.make_hmm_row(0.01, 10, 21, 30, 201, 230, "K"*10),
         ]
 
-        matches = find_more_matches_at_locus(None, None, 101, 230, "A"*500, "target", None, None, 1, hmm_rows = rows)
-        self.assertEqual(len(matches), 2)
-        self.assertEqual([m.target_start for m in matches], [101, 201])
+        proteins = hmm_expand_protein([a, b], {"T": "A"*500}, None, threshold = None, hmm_rows = rows)
+        self.assertEqual(len(proteins), 1)
+        self.assertEqual([m.target_start for m in proteins[0].matches], [101, 201])
 
-    def test_finds_original_protein_on_rev_strand_if_there_are_no_more_matches(self):
+    def test_finds_expanded_protein_on_fwd_strand(self):
 
-        rows = [
-            self.make_hmm_row(0.01, 10, 11, 20, 130, 101, "K"*10),
-            self.make_hmm_row(0.01, 10,  1, 10, 230, 201, "K"*10),
-        ]
-
-        matches = find_more_matches_at_locus(None, None, 230, 101, "T"*500, "target", None, None, -1, hmm_rows = rows)
-        self.assertEqual(len(matches), 2)
-        self.assertEqual([m.target_start for m in matches], [230, 130])
-
-    def test_expand_upstream_on_fwd_strand(self):
+        a = Match("Q", "T", 11, 20, 101, 130, 0.0, 100.0)
+        b = Match("Q", "T", 21, 30, 201, 230, 0.0, 100.0)
 
         rows = [
-            self.make_hmm_row(0.01, 10,  1, 10, 101, 130, "K"*10),
-            self.make_hmm_row(0.01, 10, 11, 20, 201, 230, "K"*10),
-            self.make_hmm_row(0.01, 10, 21, 30, 301, 330, "K"*10),
-        ]
-
-        matches = find_more_matches_at_locus(None, None, 201, 330, "A"*500, "target", None, None, 1, hmm_rows = rows)
-        self.assertEqual(len(matches), 3)
-        self.assertEqual([m.target_start for m in matches], [101, 201, 301])
-
-    def test_expand_downstream_on_fwd_strand(self):
-
-        rows = [
-            self.make_hmm_row(0.01, 10,  1, 10, 101, 130, "K"*10),
-            self.make_hmm_row(0.01, 10, 11, 20, 201, 230, "K"*10),
-            self.make_hmm_row(0.01, 10, 21, 30, 301, 330, "K"*10),
-        ]
-
-        matches = find_more_matches_at_locus(None, None, 101, 230, "A"*500, "target", None, None, 1, hmm_rows = rows)
-        self.assertEqual(len(matches), 3)
-        self.assertEqual([m.target_start for m in matches], [101, 201, 301])
-
-    def test_expand_upstream_on_rev_strand(self):
-
-        rows = [
-            self.make_hmm_row(0.01, 10, 21, 30, 130, 101, "K"*10),
-            self.make_hmm_row(0.01, 10, 11, 20, 230, 201, "K"*10),
-            self.make_hmm_row(0.01, 10,  1, 10, 330, 301, "K"*10),
-        ]
-
-        matches = find_more_matches_at_locus(None, None, 230, 101, "T"*500, "target", None, None, -1, hmm_rows = rows)
-        self.assertEqual(len(matches), 3)
-        self.assertEqual([m.target_start for m in matches], [330, 230, 130])
-
-    def test_expand_downstream_on_rev_strand(self):
-
-        rows = [
-            self.make_hmm_row(0.01, 10, 21, 30, 130, 101, "K"*10),
-            self.make_hmm_row(0.01, 10, 11, 20, 230, 201, "K"*10),
-            self.make_hmm_row(0.01, 10,  1, 10, 330, 301, "K"*10),
-        ]
-
-        matches = find_more_matches_at_locus(None, None, 330, 201, "T"*500, "target", None, None, -1, hmm_rows = rows)
-        self.assertEqual(len(matches), 3)
-        self.assertEqual([m.target_start for m in matches], [330, 230, 130])
-
-    def test_can_expand_both_directions(self):
-
-        rows = [
-            self.make_hmm_row(0.01, 10,  1, 10, 101, 130, "K"*10),
-            self.make_hmm_row(0.01, 10, 11, 20, 201, 230, "K"*10),
-            self.make_hmm_row(0.01, 10, 21, 30, 301, 330, "K"*10),
+            self.make_hmm_row(0.01, 10, 11, 20, 101, 130, "K"*10),
+            self.make_hmm_row(0.01, 10,  1, 10,  11,  40, "K"*10),
+            self.make_hmm_row(0.01, 10, 21, 30, 201, 230, "K"*10),
             self.make_hmm_row(0.01, 10, 31, 40, 401, 430, "K"*10),
         ]
 
-        matches = find_more_matches_at_locus(None, None, 201, 330, "A"*500, "target", None, None, 1, hmm_rows = rows)
-        self.assertEqual(len(matches), 4)
-        self.assertEqual([m.target_start for m in matches], [101, 201, 301, 401])
+        proteins = hmm_expand_protein([a, b], {"T": "A"*500}, None, threshold = None, hmm_rows = rows)
 
-    def test_does_not_expand_into_potential_overlapping_genes(self):
+        self.assertEqual(len(proteins), 1)
+        self.assertEqual(proteins[0].on_reverse_strand, False)
+        self.assertEqual(proteins[0].target_start, 11)
+        self.assertEqual(proteins[0].target_end, 430)
+        self.assertEqual(len(proteins[0].matches), 4)
 
-        rows = [
-            self.make_hmm_row(0.01, 10, 11, 20, 101, 130, "K"*10),  # overlaps with next one
-            self.make_hmm_row(0.01, 10, 11, 20, 201, 230, "K"*10),
-            self.make_hmm_row(0.01, 10, 21, 30, 301, 330, "K"*10),
-            self.make_hmm_row(0.01, 10, 31, 40, 401, 430, "K"*10),
-        ]
-
-        matches = find_more_matches_at_locus(None, None, 201, 330, "A"*500, "target", None, None, 1, hmm_rows = rows)
-        self.assertEqual(len(matches), 3)
-        self.assertEqual([m.target_start for m in matches], [201, 301, 401])
+    def test_finds_expanded_protein_on_rev_strand(self):
+        a = Match("Q", "T", 11, 20, 230, 201, 0.0, 100.0)
+        b = Match("Q", "T", 21, 30, 130, 101, 0.0, 100.0)
 
         rows = [
-            self.make_hmm_row(0.01, 10,  1, 10, 101, 130, "K"*10),
-            self.make_hmm_row(0.01, 10, 11, 20, 201, 230, "K"*10),
-            self.make_hmm_row(0.01, 10, 21, 30, 301, 330, "K"*10),
-            self.make_hmm_row(0.01, 10, 21, 30, 401, 430, "K"*10),  # overlaps with prev one
+            self.make_hmm_row(0.01, 10, 21, 30, 130, 101, "F"*10),
+            self.make_hmm_row(0.01, 10, 31, 40,  40,  11, "F"*10),
+            self.make_hmm_row(0.01, 10, 11, 20, 230, 201, "F"*10),
+            self.make_hmm_row(0.01, 10,  1, 10, 430, 401, "F"*10),
         ]
 
-        matches = find_more_matches_at_locus(None, None, 201, 330, "A"*500, "target", None, None, 1, hmm_rows = rows)
-        self.assertEqual(len(matches), 3)
-        self.assertEqual([m.target_start for m in matches], [101, 201, 301])
+        proteins = hmm_expand_protein([a, b], {"T": "A"*500}, None, threshold = None, hmm_rows = rows)
+        self.assertEqual(len(proteins), 1)
 
-    def test_expand_protein_returns_new_protein_hit(self):
+        self.assertEqual(proteins[0].on_reverse_strand, True)
+        self.assertEqual(proteins[0].target_start, 430)
+        self.assertEqual(proteins[0].target_end, 11)
+        self.assertEqual(len(proteins[0].matches), 4)
+
+    def test_finds_multiple_expanded_proteins_on_both_strands(self):
+        a = Match("Q", "T", 11, 20, 230, 201, 0.0, 100.0)
+        b = Match("Q", "T", 21, 30, 130, 101, 0.0, 100.0)
 
         rows = [
-            self.make_hmm_row(0.01, 10,  1, 10, 101, 130, "K"*10),
-            self.make_hmm_row(0.01, 10, 11, 20, 201, 230, "K"*10),
-            self.make_hmm_row(0.01, 10, 21, 30, 301, 330, "K"*10),
-            self.make_hmm_row(0.01, 10, 31, 40, 401, 430, "K"*10),
+            self.make_hmm_row(0.01, 10, 21, 30, 130, 101, "F"*10),
+            self.make_hmm_row(0.01, 10, 4,  13,  41,  70, "K"*10),
+            self.make_hmm_row(0.01, 10, 31, 40,  40,  11, "F"*10),
+            self.make_hmm_row(0.01, 10, 11, 20, 230, 201, "F"*10),
+            self.make_hmm_row(0.01, 10,  1, 10, 430, 401, "F"*10),
         ]
 
-        a = Match("Q", "T", 11, 20, 201, 230, 0.0, 100.0)
-        b = Match("Q", "T", 21, 30, 301, 330, 0.0, 100.0)
-        old_protein_hit = ProteinHit([a, b], 11, 30, 201, 330)
- 
-        new_hit = hmm_expand_protein(old_protein_hit, {"T": "A"*500}, None, threshold = None, hmm_rows = rows)
-        self.assertEqual(len(new_hit.matches), 4)
+        proteins = hmm_expand_protein([a, b], {"T": "A"*500}, None, threshold = None, hmm_rows = rows)
+        self.assertEqual(len(proteins), 2)
+
+        self.assertEqual(proteins[0].on_reverse_strand, True)
+        self.assertEqual(proteins[0].target_start, 430)
+        self.assertEqual(proteins[0].target_end, 11)
+        self.assertEqual(len(proteins[0].matches), 4)
+
+        self.assertEqual(proteins[1].on_reverse_strand, False)
+        self.assertEqual(proteins[1].target_start, 41)
+        self.assertEqual(proteins[1].target_end, 70)
+        self.assertEqual(len(proteins[1].matches), 1)
+
 
     def test_expand_protein_rejects_protein_below_threshold(self):
+        a = Match("Q", "T", 11, 20, 201, 230, 0.0, 100.0)
+        b = Match("Q", "T", 21, 30, 301, 330, 0.0, 100.0)
 
         rows = [
             self.make_hmm_row(0.01, 10,  1, 10, 101, 130, "K"*10),
@@ -157,15 +115,11 @@ class TestLookingForProtein(unittest.TestCase):
             self.make_hmm_row(0.01, 10, 31, 40, 401, 430, "K"*10),
         ]
 
-        a = Match("Q", "T", 11, 20, 201, 230, 0.0, 100.0)
-        b = Match("Q", "T", 21, 30, 301, 330, 0.0, 100.0)
-        old_protein_hit = ProteinHit([a, b], 11, 30, 201, 330)
- 
-        new_hit = hmm_expand_protein(old_protein_hit, {"T": "A"*500}, None, threshold = None, hmm_rows = rows)
-        self.assertEqual(new_hit is None, False)
+        proteins = hmm_expand_protein([a, b], {"T": "A"*500}, None, threshold = None, hmm_rows = rows)
+        self.assertEqual(len(proteins), 1)
 
-        new_hit = hmm_expand_protein(old_protein_hit, {"T": "A"*500}, None, threshold = 40, hmm_rows = rows)
-        self.assertEqual(new_hit is None, False)
+        proteins = hmm_expand_protein([a, b], {"T": "A"*500}, None, threshold = 41, hmm_rows = rows)
+        self.assertEqual(len(proteins), 0)
 
-        new_hit = hmm_expand_protein(old_protein_hit, {"T": "A"*500}, None, threshold = 41, hmm_rows = rows)
-        self.assertEqual(new_hit is None, True)
+        proteins = hmm_expand_protein([a, b], {"T": "A"*500}, None, threshold = 40, hmm_rows = rows)
+        self.assertEqual(len(proteins), 1)

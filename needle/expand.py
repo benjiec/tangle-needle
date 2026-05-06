@@ -3,29 +3,9 @@ from .match import Match, ProteinHit, build_graph, graph_paths
 from .detect import hmm_search_genome
 
 VERBOSE_EXPAND = 0
+MIN_AA_LENGTH = 8
 
-
-def print_matches(matches, index_of_old_start, index_of_old_end, index_of_new_start, index_of_new_end):
-    for i, match in enumerate(matches):
-        mark = "   "
-        if i in (index_of_old_start, index_of_old_end):
-            mark = " ->"
-        if i in (index_of_new_start, index_of_new_end):
-            mark = " =>"
-        print(f" {mark} {match.target_start}, {match.target_end}, {match.query_start}, {match.query_end}, {match.e_value}, {match.score}")
-
-
-def find_more_matches_at_locus(
-  query_accession,
-  hmm_file,
-  target_full_sequence,
-  target_accession,
-  target_left,
-  target_right,
-  strand,
-  cpus=None,
-  hmm_rows=None):
-
+def find_more_matches_at_locus(query_accession, hmm_file, target_full_sequence, target_accession, target_left, target_right, strand, cpus=None, hmm_rows=None):
     if hmm_rows is None:
         hmm_rows = hmm_search_genome(
             hmm_file, {target_accession: target_full_sequence},
@@ -33,6 +13,7 @@ def find_more_matches_at_locus(
             target_left = target_left,
             target_right = target_right,
             strand = strand,
+            min_aa_length = MIN_AA_LENGTH,
             cpus = cpus,
             filter_by_evalue_cond = True  # we already assume there's a protein here...
         )
@@ -83,8 +64,8 @@ def hmm_expand_protein(matches, genomic_sequence_dict, hmm_file, threshold = Non
 
     if VERBOSE_EXPAND > 1:
         print(f"{query_accession} on {target_accession}, {target_left}-{target_right} (based on {start}-{end}), strand {strand}, contig {len(target_full_sequence)}")
-        for i, match in enumerate(protein_hit.matches):
-            print(f" old {match.target_start}, {match.target_end}, {match.query_start}, {match.query_end}")
+        for i, match in enumerate(matches):
+            print(f"  old {match}")
 
     new_matches = find_more_matches_at_locus(
         query_accession, hmm_file, target_full_sequence, target_accession, target_left, target_right, strand,
@@ -100,6 +81,10 @@ def hmm_expand_protein(matches, genomic_sequence_dict, hmm_file, threshold = Non
     proteins = []
 
     for path in paths:
+        if VERBOSE_EXPAND > 1:
+            print(f"  new path")
+            for match in path:
+                print(f"   new {match}")
 
         if threshold:
             match_total_score = sum([m.score for m in path])

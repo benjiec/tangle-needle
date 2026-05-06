@@ -11,6 +11,7 @@ ap.add_argument("--cpus", type=int, default=None)
 ap.add_argument("--target-accession", type=str, default=None)
 ap.add_argument("--target-left", type=int, default=None)
 ap.add_argument("--target-right", type=int, default=None)
+ap.add_argument("--min-aa-length", type=int, default=26)
 args = ap.parse_args()
 
 fna_file = args.fna_file
@@ -21,7 +22,9 @@ hmm_rows = hmm_search_genome(
     target_accession = args.target_accession,
     target_left = args.target_left,
     target_right = args.target_right,
-    cpus = args.cpus
+    min_aa_length = args.min_aa_length,
+    cpus = args.cpus,
+    print_stats = True
 )
 
 detected = []
