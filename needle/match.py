@@ -6,12 +6,6 @@ from Bio.Seq import Seq
 import networkx as nx
 
 
-# it's possible to get matches with overlap at 8 aa or more, so setting this
-# too low will breakup proteins
-
-MAX_AA_OVERLAP = 10
-
-
 @dataclass(frozen=True)
 class Match:  # does not support matches across circular boundary
     query_accession: str
@@ -90,7 +84,7 @@ class Reason(object):
         self.reason = msg
 
 
-def match_is_pred_of(left, right, reason, max_aa_overlap = MAX_AA_OVERLAP):
+def match_is_pred_of(left, right, reason):
     """
     returns True if left is a pred of right. requires left and right being
     ordered by sortable_target_start, which is equivalent to saying they really
@@ -131,17 +125,17 @@ def match_is_pred_of(left, right, reason, max_aa_overlap = MAX_AA_OVERLAP):
         reason.was(msg)
         return False
 
-    # query overlap under threshold, otherwise just start a new path, may be a
-    # new copy of the protein
-    if query_overlap_len > max_aa_overlap:
-        msg = f"Overlap between matches longer than threshold {max_aa_overlap} aa"
+    # query overlap cannot be bigger than 80% of either side of the query
+    if query_overlap_len > int(0.8 * left.query_len()) or \
+       query_overlap_len > int(0.8 * right.query_len()):
+        msg = f"Overlap between matches longer than large portions of one of the matched protein sequence"
         reason.was(msg)
         return False
 
     return True
 
 
-def build_graph(matches, reasons = None, max_aa_overlap = MAX_AA_OVERLAP):
+def build_graph(matches, reasons = None):
 
     graph = nx.DiGraph()
     matches = sorted(matches, key=lambda m: (m.sortable_target_start, m.sortable_target_end))
@@ -159,7 +153,7 @@ def build_graph(matches, reasons = None, max_aa_overlap = MAX_AA_OVERLAP):
                 continue
 
             reason = Reason()
-            if match_is_pred_of(possible_pred, match, reason, max_aa_overlap = max_aa_overlap):
+            if match_is_pred_of(possible_pred, match, reason):
                 ancestors = nx.ancestors(graph, possible_pred)
                 descendants = nx.descendants(graph, possible_pred)
 
@@ -173,10 +167,10 @@ def build_graph(matches, reasons = None, max_aa_overlap = MAX_AA_OVERLAP):
                 if len(descendants) > 0:
                     max_descendant_target_end = max([x.sortable_target_end for x in descendants])
                     max_descendant_query_end = max([x.query_end for x in descendants])
-                    if max_descendant_query_end - match.query_start > max_aa_overlap and \
+                    if max_descendant_query_end - match.query_start > 0.8*match.query_len() and \
                        max_descendant_target_end < match.sortable_target_end:
                         if reasons is not None:
-                            reason.was(f"potential pred {possible_pred} already part of another path that overlaps with {match}")
+                            reason.was(f"Potential pred {possible_pred} already part of another path that overlaps with {match}")
                             reasons.append(reason)
                         continue
 

@@ -64,23 +64,23 @@ class TestIsPred(TesterBase):
         #      bbb
 
         m1 = self.makeM(1, 10, 30, 60)
-        m2 = self.makeM(6, 11, 33, 65)
+        m2 = self.makeM(8, 18, 33, 65)
 
         r = Reason()
         self.assertEqual(match_is_pred_of(m1, m2, r), True)
 
-        m2 = self.makeM(6, 11, 33, 45)
+        m2 = self.makeM(8, 18, 33, 45)
         self.assertEqual(match_is_pred_of(m1, m2, r), False)
         self.assertEqual(r.reason.startswith("One matched target region contains the other"), True)
 
         # now reversed strand
 
         m1 = self.makeM(1, 10, 60, 30)
-        m2 = self.makeM(6, 11, 45, 25)
+        m2 = self.makeM(8, 18, 45, 25)
 
         self.assertEqual(match_is_pred_of(m1, m2, r), True)
 
-        m2 = self.makeM(6, 11, 45, 33)
+        m2 = self.makeM(8, 18, 45, 33)
         self.assertEqual(match_is_pred_of(m1, m2, r), False)
         self.assertEqual(r.reason.startswith("One matched target region contains the other"), True)
 
@@ -112,13 +112,13 @@ class TestIsPred(TesterBase):
         m1 = self.makeM( 5, 35, 1001, 1090)
         m2 = self.makeM(35, 65, 1101, 1190)
         m3 = self.makeM(65, 95, 1201, 1290)
-        m4 = self.makeM(70, 99, 1301, 1390)
+        m4 = self.makeM(68, 96, 1301, 1390)
 
         r = Reason()
-        self.assertEqual(match_is_pred_of(m1, m2, r, max_aa_overlap = 20), True)
-        self.assertEqual(match_is_pred_of(m2, m3, r, max_aa_overlap = 20), True)
-        self.assertEqual(match_is_pred_of(m3, m4, r, max_aa_overlap = 20), False)
-        self.assertEqual(r.reason.startswith("Overlap between matches longer than threshold 20 aa"), True)
+        self.assertEqual(match_is_pred_of(m1, m2, r), True)
+        self.assertEqual(match_is_pred_of(m2, m3, r), True)
+        self.assertEqual(match_is_pred_of(m3, m4, r), False)
+        self.assertEqual(r.reason.startswith("Overlap between matches longer than"), True)
 
     def test_not_pred_if_matched_query_regions_overlap_completely(self):
 
@@ -209,7 +209,7 @@ class TestGraphPaths(TesterBase):
         m2 = self.makeM(20, 30, 70,  100)
         m3 = self.makeM(20, 30, 100, 130)
 
-        graph = build_graph([m1, m2, m3], max_aa_overlap = 8)
+        graph = build_graph([m1, m2, m3])
         paths = graph_paths(graph)
         self.assertEqual(len(paths), 2)
         self.assertCountEqual(

@@ -42,7 +42,7 @@ def main():
     res = Results(args.hmm_search_results_tsv, target_fasta_path=args.fna_file)
     clusters = group_matches(res.matches())
 
-    # clusters = [c for c in clusters if c[0].target_accession == "NW_018148518.1" and c[0].query_accession == "K03347"]
+    # clusters = [c for c in clusters if c[0].target_accession == "NW_018148518.1" and c[0].query_accession == "K14611"]
 
     accession_ids = [cluster[0].query_accession for cluster in clusters]
     hmm_collection = HMMCollection(args.hmm_file, accession_ids)
