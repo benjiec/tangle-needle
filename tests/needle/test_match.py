@@ -115,9 +115,9 @@ class TestIsPred(TesterBase):
         m4 = self.makeM(70, 99, 1301, 1390)
 
         r = Reason()
-        self.assertEqual(match_is_pred_of(m1, m2, r), True)
-        self.assertEqual(match_is_pred_of(m2, m3, r), True)
-        self.assertEqual(match_is_pred_of(m3, m4, r), False)
+        self.assertEqual(match_is_pred_of(m1, m2, r, max_aa_overlap = 20), True)
+        self.assertEqual(match_is_pred_of(m2, m3, r, max_aa_overlap = 20), True)
+        self.assertEqual(match_is_pred_of(m3, m4, r, max_aa_overlap = 20), False)
         self.assertEqual(r.reason.startswith("Overlap between matches longer than threshold 20 aa"), True)
 
     def test_not_pred_if_matched_query_regions_overlap_completely(self):
@@ -198,6 +198,23 @@ class TestGraphPaths(TesterBase):
         self.assertCountEqual(
             paths,
             [[m1, m4], [m2, m3, m4]]
+        )
+
+    def test_does_not_connect_node_if_possible_pred_already_has_descendants_covering_similar_region(self):
+        # aaaaaaaaa
+        #           bbb
+        #                      ccc
+
+        m1 = self.makeM(1,  20, 1,   60)
+        m2 = self.makeM(20, 30, 70,  100)
+        m3 = self.makeM(20, 30, 100, 130)
+
+        graph = build_graph([m1, m2, m3])
+        paths = graph_paths(graph)
+        self.assertEqual(len(paths), 2)
+        self.assertCountEqual(
+            paths,
+            [[m1, m2], [m3]]
         )
 
 

@@ -6,7 +6,7 @@ from Bio.Seq import Seq
 import networkx as nx
 
 
-MAX_AA_OVERLAP = 20
+MAX_AA_OVERLAP = 8
 
 
 @dataclass(frozen=True)
@@ -87,7 +87,7 @@ class Reason(object):
         self.reason = msg
 
 
-def match_is_pred_of(left, right, reason):
+def match_is_pred_of(left, right, reason, max_aa_overlap = MAX_AA_OVERLAP):
     """
     returns True if left is a pred of right. requires left and right being
     ordered by sortable_target_start, which is equivalent to saying they really
@@ -130,15 +130,15 @@ def match_is_pred_of(left, right, reason):
 
     # query overlap under threshold, otherwise just start a new path, may be a
     # new copy of the protein
-    if query_overlap_len > MAX_AA_OVERLAP:
-        msg = f"Overlap between matches longer than threshold {MAX_AA_OVERLAP} aa"
+    if query_overlap_len > max_aa_overlap:
+        msg = f"Overlap between matches longer than threshold {max_aa_overlap} aa"
         reason.was(msg)
         return False
 
     return True
 
 
-def build_graph(matches, reasons = None):
+def build_graph(matches, reasons = None, max_aa_overlap = MAX_AA_OVERLAP):
 
     graph = nx.DiGraph()
     matches = sorted(matches, key=lambda m: (m.sortable_target_start, m.sortable_target_end))
@@ -156,15 +156,30 @@ def build_graph(matches, reasons = None):
                 continue
 
             reason = Reason()
-            if match_is_pred_of(possible_pred, match, reason):
+            if match_is_pred_of(possible_pred, match, reason, max_aa_overlap = max_aa_overlap):
                 ancestors = nx.ancestors(graph, possible_pred)
-                if len(ancestors) == 0 or \
-                   match.query_start > max([x.query_end for x in ancestors]):
-                    graph.add_edge(possible_pred, match)
-                    found_pred = True
-                elif reasons is not None:
-                   reason.was("Junctions overlap")
-                   reasons.append(reason)
+                descendants = nx.descendants(graph, possible_pred)
+
+                if len(ancestors) > 0 and \
+                   match.query_start <= max([x.query_end for x in ancestors]):
+                    if reasons is not None:
+                        reason.was(f"Junctions overlap between {match} and {possible_pred}")
+                        reasons.append(reason)
+                    continue
+
+                if len(descendants) > 0:
+                    max_descendant_target_end = max([x.sortable_target_end for x in descendants])
+                    max_descendant_query_end = max([x.query_end for x in descendants])
+                    if max_descendant_query_end - match.query_start > max_aa_overlap and \
+                       max_descendant_target_end < match.sortable_target_end:
+                        if reasons is not None:
+                            reason.was(f"{possible_pred} already part of another path that overlaps with {match}")
+                            reasons.append(reason)
+                        continue
+
+                graph.add_edge(possible_pred, match)
+                found_pred = True
+
             elif reasons is not None:
                 reasons.append(reason)
 

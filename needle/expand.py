@@ -2,7 +2,7 @@ from .sequence import extract_subsequence_strand_sensitive
 from .match import Match, ProteinHit, build_graph, graph_paths
 from .detect import hmm_search_genome
 
-VERBOSE_EXPAND = 0
+VERBOSE_EXPAND = 2
 MIN_AA_LENGTH = 8
 
 def find_more_matches_at_locus(query_accession, hmm_file, target_full_sequence, target_accession, target_left, target_right, strand, cpus=None, hmm_rows=None):
@@ -40,6 +40,8 @@ def find_more_matches_at_locus(query_accession, hmm_file, target_full_sequence, 
         )
         assert match.matched_sequence == match.target_sequence_translated()
         new_matches.append(match)
+        if VERBOSE_EXPAND > 1:
+            print(f"  expanded search {match}")
 
     return new_matches
 
@@ -78,19 +80,21 @@ def hmm_expand_protein(matches, genomic_sequence_dict, hmm_file, threshold = Non
 
     graph = build_graph(new_matches)
     paths = graph_paths(graph)
+    if VERBOSE_EXPAND > 1:
+        print(f"  graph produced {len(paths)} paths")
     proteins = []
 
     for path in paths:
         if VERBOSE_EXPAND > 1:
             print(f"  new path")
             for match in path:
-                print(f"   new {match}")
+                print(f"    new {match}")
 
         if threshold:
             match_total_score = sum([m.score for m in path])
             if match_total_score < threshold:
                 if VERBOSE_EXPAND > 0:
-                    print(f"{query_accession} on {target_accession}, {target_left}-{target_right}, score {match_total_score} not meeting threshold {threshold}")
+                    print(f"  detected protein ({query_accession} on {target_accession}, {path[0].target_start}-{path[-1].target_end}) has score {match_total_score} not meeting threshold {threshold}")
                 continue
 
         protein = ProteinHit(
@@ -125,6 +129,8 @@ def hmm_expand(clusters, genomic_sequence_dict, hmm_collection, thresholds = Non
                     print("using", threshold, "as threshold for", cluster_query_accession)
             proteins = hmm_expand_protein(cluster, genomic_sequence_dict, hmm_profile, threshold = threshold, cpus = cpus)
             for protein in proteins:
+                if VERBOSE_EXPAND > 1:
+                    print(f"  adding protein {protein.protein_hit_id}")
                 new_protein_hits[protein.protein_hit_id] = protein
 
     return list(new_protein_hits.values())
