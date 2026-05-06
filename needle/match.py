@@ -1,6 +1,3 @@
-import os
-import csv
-import errno
 import hashlib
 import itertools
 from dataclasses import dataclass
@@ -8,7 +5,8 @@ from typing import Dict, List, Optional, Tuple
 from Bio.Seq import Seq
 import networkx as nx
 
-MAX_AA_OVERLAP_GROUPING = 15
+
+MAX_AA_OVERLAP = 20
 
 
 @dataclass(frozen=True)
@@ -49,6 +47,9 @@ class Match:  # does not support matches across circular boundary
         dna = dna[:usable_len]
         return str(Seq(dna).translate(table="Standard", to_stop=False))
 
+    def __str__(self):
+        return f"{self.query_accession}/{self.query_start}-{self.query_end} on {self.target_accession}/{self.target_start}-{self.target_end}"
+
 
 class NonlinearMatchException(Exception):
     pass
@@ -86,34 +87,37 @@ def match_is_pred_of(left, right, reason):
         reason.was("Matches are on different strands")
         return False
 
-    if left.query_start > right.target_start:
-        msg = "Consecutive query matches are reversed on DNA, new copy? (%s, %s, rev strand %s, dna %s-%s (hmm %s-%s %s) and %s-%s (hmm %s-%s %s))" % \
-                (left.query_accession, left.target_accession, left.on_reverse_strand,
-                 left.target_start, left.target_end, left.query_start, left.query_end, left.e_value,
-                 right.target_start, right.target_end, right.query_start, right.query_end, right.e_value)
+    if left.query_start > right.query_start:
+        msg = f"Matched to query in unexpected direction ({left} and {right})"
         reason.was(msg)
         return False
 
     # query cannot contain each other
-    if right.query_end <= left.query_end:
-        msg = "Matching queries contain each other (%s %s-%s and %s-%s)" % \
-                (left.target_accession, left.query_start, left.query_end, right.query_start, right.query_end)
+    if left.query_start == right.query_start or right.query_end <= left.query_end:
+        msg = f"One matched query region contains the other ({left} and {right})"
         reason.was(msg)
         return False
 
     # left cannot contain right on target
     if (left.on_reverse_strand is False and right.target_end < left.target_end) or \
        (left.on_reverse_strand is True and right.target_end > left.target_end):
-        msg = "DNA matches contain each other"
+        msg = "One matched target region contains the other ({left} and {right})"
         reason.was(msg)
         return False
 
-    # query overlap not bigger than either left or right sequence
-
     query_overlap_len = max(0, left.query_end - right.query_start + 1)
+
+    # query overlap not bigger than either left or right sequence
     if query_overlap_len > len(left.target_sequence_translated()) or \
        query_overlap_len > len(right.target_sequence_translated()):
-        msg = "Overlap larger than matched sequence"
+        msg = "Overlap between matched sequences longer than one of the matched sequence ({left} and {right})"
+        reason.was(msg)
+        return False
+
+    # query overlap under threshold, otherwise just start a new path, may be a
+    # new copy of the protein
+    if query_overlap_len > MAX_AA_OVERLAP:
+        msg = f"Overlap between matches longer than threshold {MAX_AA_OVERLAP} aa"
         reason.was(msg)
         return False
 
@@ -171,7 +175,7 @@ def graph_paths(graph):
     return all_paths
 
 
-def order_matches(matches: List[Match]) -> List[Match]:
+def order_matches_by_query(matches: List[Match]) -> List[Match]:
     if not matches:
         return []
 
@@ -185,13 +189,12 @@ def order_matches(matches: List[Match]) -> List[Match]:
     return sorted(matches, key=lambda m: (m.query_start, m.query_end))
 
 
-def order_matches_for_junctions(matches: List[Match]) -> List[Tuple[Match, Match, int, int]]:
+def ordered_pairs(matches: List[Match]) -> List[Tuple[Match, Match, int, int]]:
     if not matches:
         return []
 
-    ordered = order_matches(matches)
+    ordered = order_matches_by_query(matches)
     pairs: List[Tuple[Match, Match, int, int]] = []
-    junctions: List[Tuple[int, int]] = []
 
     i = 0
     while i < len(ordered)-1:
@@ -202,10 +205,6 @@ def order_matches_for_junctions(matches: List[Match]) -> List[Tuple[Match, Match
         query_overlap_len = max(0, left.query_end - right.query_start + 1)
         gap_len = max(0, right.query_start - left.query_end - 1)
         pairs.append((left, right, query_overlap_len, gap_len))
-        if gap_len:
-            junctions.append((left.query_end, right.query_start))
-        else:
-            junctions.append((right.query_start, left.query_end))
         i += 1
 
     return pairs
@@ -230,7 +229,7 @@ class ProteinHit:
     @staticmethod
     def can_collate_from_matches(matches, verbose=False) -> bool:
         try:
-            pairs = order_matches_for_junctions(matches)
+            pairs = ordered_pairs(matches)
         except NonlinearMatchException as e:
             if verbose:
                 print(str(e))
@@ -243,7 +242,7 @@ class ProteinHit:
     @staticmethod
     def can_produce_single_sequence_from_matches(matches) -> bool:
         try:
-            pairs = order_matches_for_junctions(matches)
+            pairs = ordered_pairs(matches)
         except NonlinearMatchException:
             return False
         for left, right, overlap, gaps in pairs:
@@ -259,7 +258,7 @@ class ProteinHit:
         collated = ""
         if len(self.matches) < 2:
             return self.matches[0].target_sequence_translated()
-        pairs = order_matches_for_junctions(self.matches)
+        pairs = ordered_pairs(self.matches)
         cur_left_aa = pairs[0][0].target_sequence_translated()
         for left, right, overlap, gaps in pairs:
             right_aa = right.target_sequence_translated()
@@ -316,7 +315,7 @@ class ProteinHit:
         return first.target_accession
 
 
-def group_matches(all_matches, max_intron_length: int = 10_000, max_overlap_len: int = MAX_AA_OVERLAP_GROUPING) -> List[List[Match]]:
+def group_matches(all_matches, max_intron_length: int = 10_000) -> List[List[Match]]:
     """
     cluster Match objects
       - groups by (query_accession, target_accession)
@@ -338,7 +337,6 @@ def group_matches(all_matches, max_intron_length: int = 10_000, max_overlap_len:
     final_clusters = []
 
     for (query_id, target_id, on_reverse_strand), group in grouped.items():
-        # Sort by target interval start to create distance-based clusters
         group_sorted_by_target = sorted(group, key=lambda m: target_interval(m)[0])
 
         clusters: List[List[Match]] = []
@@ -346,15 +344,11 @@ def group_matches(all_matches, max_intron_length: int = 10_000, max_overlap_len:
         current_right: Optional[int] = None
         current_query = None
 
-        # print("grouping", query_id, "on", target_id, "rev", on_reverse_strand)
         for m in group_sorted_by_target:
             left_t, right_t = target_interval(m)
             fragment_len = m.query_end - m.query_start + 1
 
-            # print("  left", left_t, "right", right_t, "current query", current_query, "match", m.query_start, m.query_end)
-
-            # New cluster
-            if not current_cluster:
+            if not current_cluster:  # new cluster
                 current_cluster = [m]
                 current_right = right_t
                 current_query = (m.query_start, m.query_end)
@@ -362,8 +356,7 @@ def group_matches(all_matches, max_intron_length: int = 10_000, max_overlap_len:
 
             else:
                 distance = left_t - (current_right or left_t)
-                # Too far by target nuc distance, start new cluster
-                if distance > max_intron_length:
+                if distance > max_intron_length:  # too far by target nuc distance, start new cluster
                     clusters.append(current_cluster)
                     current_cluster = [m]
                     current_right = right_t
@@ -376,35 +369,7 @@ def group_matches(all_matches, max_intron_length: int = 10_000, max_overlap_len:
                     current_query = (m.query_start, m.query_end)
                     # print("    overlap on genome, add to current cluster")
 
-                elif current_right > right_t:  # this one is contained in the last match, start new cluster
-                    clusters.append(current_cluster)
-                    current_cluster = [m]
-                    current_right = right_t
-                    current_query = (m.query_start, m.query_end)
-                    # print("    contained match? start new cluster")
-
-                # Query rewound, start new cluster
-                # Criteria here is:
-                #    There is overlap on query and not overlap on target, and
-                #      Too long overlap or
-                #      Overlap is >50% of fragment
-                #      Completely rewond (e.g. repeat)
-                elif (on_reverse_strand is False and m.query_start < current_query[1] and \
-                      ((current_query[1] - m.query_start + 1) > max_overlap_len or \
-                       (current_query[1] - m.query_start + 1) / fragment_len > 0.5 or \
-                       m.query_start <= current_query[0])) \
-                    or \
-                     (on_reverse_strand is True and m.query_end > current_query[0] and \
-                      ((m.query_end - current_query[0] + 1) > max_overlap_len or \
-                       (m.query_end - current_query[0] + 1) / fragment_len > 0.5 or \
-                       m.query_start >= current_query[0])):
-                    clusters.append(current_cluster)
-                    current_cluster = [m]
-                    current_query = (m.query_start, m.query_end)
-                    # print("    query rewound, start new cluster")
-
-                # Add to cluster
-                else:
+                else:  # add to cluster
                     current_cluster.append(m)
                     current_right = max(current_right or right_t, right_t)
                     current_query = (m.query_start, m.query_end)

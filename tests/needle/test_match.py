@@ -3,8 +3,8 @@ import tempfile
 import unittest
 import random
 
-from needle.match import group_matches, ProteinHit, Match, order_matches_for_junctions, NonlinearMatchException
-from needle.match import Reason, match_is_pred_of, build_graph, graph_paths
+from needle.match import group_matches, ProteinHit, Match, NonlinearMatchException
+from needle.match import Reason, match_is_pred_of, build_graph, graph_paths, order_matches_by_query, ordered_pairs
 
 
 class TesterBase(unittest.TestCase):
@@ -33,7 +33,33 @@ class TestIsPred(TesterBase):
         self.assertEqual(match_is_pred_of(m2, m3, r), True)
         self.assertEqual(match_is_pred_of(m1, m3, r), True)
 
-    def test_not_pred_if_target_coordinates_contained_but_query_not(self):
+    def test_not_pred_if_reversed_on_query(self):
+        m1 = self.makeM(8, 19, 1, 30)
+        m2 = self.makeM(1, 10, 24, 45)
+
+        r = Reason()
+        self.assertEqual(match_is_pred_of(m1, m2, r), False)
+        self.assertEqual(r.reason.startswith("Matched to query in unexpected direction"), True)
+
+        m1 = self.makeM(8, 19, 60, 31)
+        m2 = self.makeM(1, 10, 35, 1)
+
+        r = Reason()
+        self.assertEqual(match_is_pred_of(m1, m2, r), False)
+        self.assertEqual(r.reason.startswith("Matched to query in unexpected direction"), True)
+
+    def test_not_pred_if_query_regions_contained_in_one(self):
+        # aaaaaaaaa
+        #      bbb
+
+        m1 = self.makeM(1, 10, 1, 30)
+        m2 = self.makeM(6, 9, 24, 45)
+
+        r = Reason()
+        self.assertEqual(match_is_pred_of(m1, m2, r), False)
+        self.assertEqual(r.reason.startswith("One matched query region contains the other"), True)
+
+    def test_not_pred_if_target_regions_contained_in_one(self):
         # aaaaaaaaa
         #      bbb
 
@@ -45,36 +71,18 @@ class TestIsPred(TesterBase):
 
         m2 = self.makeM(6, 11, 33, 45)
         self.assertEqual(match_is_pred_of(m1, m2, r), False)
-        self.assertEqual(r.reason, "DNA matches contain each other")
+        self.assertEqual(r.reason.startswith("One matched target region contains the other"), True)
 
-    def test_not_pred_if_target_coordinates_contained_on_reverse_strand_but_query_not(self):
-        # aaaaaaaaa
-        #      bbb
+        # now reversed strand
 
-        m1 = self.makeM(1, 10, 60, 31)
-        m2 = self.makeM(6, 11, 59, 43)
+        m1 = self.makeM(1, 10, 60, 30)
+        m2 = self.makeM(6, 11, 45, 25)
 
-        r = Reason()
-        self.assertEqual(match_is_pred_of(m1, m2, r), False)
-        self.assertEqual(r.reason, "DNA matches contain each other")
-
-    def test_not_pred_on_contained_match(self):
-        # aaaaaaaaa
-        #      bbbbbbbbbbb
-        #            ccc
-        #                ddd
-
-        m1 = self.makeM(1, 10, 1, 30)
-        m2 = self.makeM(6, 16, 16, 48)
-        m3 = self.makeM(12, 14, 34, 42)
-        m4 = self.makeM(16, 18, 46, 54)
-
-        r = Reason()
         self.assertEqual(match_is_pred_of(m1, m2, r), True)
-        self.assertEqual(match_is_pred_of(m2, m3, r), False)
-        self.assertEqual(match_is_pred_of(m1, m3, r), True)
-        self.assertEqual(match_is_pred_of(m3, m4, r), True)
-        self.assertEqual(match_is_pred_of(m2, m4, r), True)
+
+        m2 = self.makeM(6, 11, 45, 33)
+        self.assertEqual(match_is_pred_of(m1, m2, r), False)
+        self.assertEqual(r.reason.startswith("One matched target region contains the other"), True)
 
     def test_not_pred_if_query_coordinates_do_not_align_with_target_coordinates(self):
 
@@ -85,29 +93,45 @@ class TestIsPred(TesterBase):
         self.assertEqual(match_is_pred_of(m2, m1, r), False)
         self.assertEqual(r.reason, "Matches are on different strands")
 
-    def test_not_pred_if_query_order_is_not_same_as_target_order(self):
-
-        m1 = self.makeM(1, 10, 31, 60)
-        m2 = self.makeM(6, 16, 1, 30)
-
-        r = Reason()
-        self.assertEqual(match_is_pred_of(m2, m1, r), False)
-        self.assertEqual(r.reason.startswith("Matching queries contain each other"), True)
-
     def test_not_pred_if_query_overlap_is_larger_than_left_or_right_sequence(self):
 
-        m1 = self.makeM(6, 16, 1, 10)   # there are deletions of query aa on DNA
-        m2 = self.makeM(10, 20, 15, 40)
+        m1 = self.makeM(6,  16, 1,  21)
+        m2 = self.makeM(10, 20, 25, 50)
 
         r = Reason()
-        self.assertEqual(match_is_pred_of(m1, m2, r), False)
-        self.assertEqual(r.reason.startswith("Overlap larger than matched"), True)
+        # overlap is 7 aa, so nuc sequence should be 21 bp or longer
+        self.assertEqual(match_is_pred_of(m1, m2, r), True)
 
-        m1 = self.makeM(6, 16, 1, 30)
-        m2 = self.makeM(10, 20, 15, 33)  # there are deletions of query aa on DNA
-
+        # make nc sequence 20 bps, so overlap is longer, not allowed
+        m1 = self.makeM(6,  16, 1,  20)
         self.assertEqual(match_is_pred_of(m1, m2, r), False)
-        self.assertEqual(r.reason.startswith("Overlap larger than matched"), True)
+        self.assertEqual(r.reason.startswith("Overlap between matched sequences longer than one of the matched sequence"), True)
+
+    def test_not_pred_if_overlap_of_matched_query_regions_is_too_large(self):
+
+        m1 = self.makeM( 5, 35, 1001, 1090)
+        m2 = self.makeM(35, 65, 1101, 1190)
+        m3 = self.makeM(65, 95, 1201, 1290)
+        m4 = self.makeM(70, 99, 1301, 1390)
+
+        r = Reason()
+        self.assertEqual(match_is_pred_of(m1, m2, r), True)
+        self.assertEqual(match_is_pred_of(m2, m3, r), True)
+        self.assertEqual(match_is_pred_of(m3, m4, r), False)
+        self.assertEqual(r.reason.startswith("Overlap between matches longer than threshold 20 aa"), True)
+
+    def test_not_pred_if_matched_query_regions_overlap_completely(self):
+
+        m1 = self.makeM( 5, 18, 1001, 1020)
+        m2 = self.makeM(15, 28, 1101, 1120)
+        m3 = self.makeM(25, 38, 1201, 1220)
+        m4 = self.makeM(25, 48, 1301, 1520)
+
+        r = Reason()
+        self.assertEqual(match_is_pred_of(m1, m2, r), True)
+        self.assertEqual(match_is_pred_of(m2, m3, r), True)
+        self.assertEqual(match_is_pred_of(m3, m4, r), False)
+        self.assertEqual(r.reason.startswith("One matched query region contains the other"), True)
 
 
 class TestGraphPaths(TesterBase):
@@ -158,94 +182,54 @@ class TestGraphPaths(TesterBase):
             [[m1, m2], [m1, m3]]
         )
 
+    def test_multiple_starting_nodes_for_paths(self):
+        # aaaaaaaaa
+        #   bbb ccc
+        #           ddd
 
-class TestGroupMatches(TesterBase):
+        m1 = self.makeM(1,  20, 1,   60)
+        m2 = self.makeM(6,  10, 70,  80)
+        m3 = self.makeM(12, 20, 90,  104)
+        m4 = self.makeM(21, 24, 120, 130)
 
-    def test_order_matches_for_junctions_overlap_and_gap(self):
-        m1 = self.makeM(1, 10, 1, 30)
-        m2 = self.makeM(8, 15, 24, 45)
+        graph = build_graph([m1, m2, m3, m4])
+        paths = graph_paths(graph)
+        self.assertEqual(len(paths), 2)
+        self.assertCountEqual(
+            paths,
+            [[m1, m4], [m2, m3, m4]]
+        )
+
+
+class TestOrderingMatches(TesterBase):
+
+    def test_order_matches_by_query_errors_if_multiple_paths(self):
+        m1 = self.makeM(1,  10, 1,  30)
+        m2 = self.makeM(8,  15, 24, 45)
         m3 = self.makeM(18, 20, 60, 66)
 
-        pairs = order_matches_for_junctions([m1, m3, m2])  # input not in order
+        r = order_matches_by_query([m1, m3, m2])  # input not in order
+        self.assertEqual(r, [m1, m2, m3])
+
+        m1 = self.makeM(1,  10, 1,  30)
+        m2 = self.makeM(8,  9,  24, 45)
+        m3 = self.makeM(18, 20, 60, 66)
+
+        with self.assertRaisesRegex(NonlinearMatchException, "One matched query region contains the other"):
+            r = order_matches_by_query([m1, m3, m2])  # input not in order
+
+    def test_ordered_pairs_return_junction_information(self):
+        m1 = self.makeM(1,  10, 1,  30)
+        m2 = self.makeM(8,  15, 24, 45)
+        m3 = self.makeM(18, 20, 60, 66)
+
+        pairs = ordered_pairs([m1, m3, m2])  # input not in order
         self.assertEqual(len(pairs), 2)
         self.assertEqual(pairs[0], (m1, m2, 3, 0))
         self.assertEqual(pairs[1], (m2, m3, 0, 2))
 
-    def test_order_throws_error_if_junctions_overlap(self):
-        # aaaaaaaa
-        #      bbbbbb
-        #        cccccccc
 
-        m1 = self.makeM(1, 8,  1, 24)
-        m2 = self.makeM(6, 12, 16, 36)
-        m3 = self.makeM(8, 16, 22, 48)
-
-        with self.assertRaisesRegex(NonlinearMatchException, "Junctions overlap"):
-            pairs = order_matches_for_junctions([m1, m3, m2])  # input not in order
-
-    def test_order_throws_error_on_if_target_coordinates_contained_but_query_not(self):
-        # aaaaaaaaa
-        #      bbb
-
-        m1 = self.makeM(1, 10, 30, 60)
-        m2 = self.makeM(6, 11, 33, 65)
-        pairs = order_matches_for_junctions([m1, m2])
-
-        m2 = self.makeM(6, 11, 33, 45)
-        with self.assertRaisesRegex(NonlinearMatchException, "DNA matches contain each other"):
-            pairs = order_matches_for_junctions([m1, m2])
-
-    def test_order_throws_error_on_if_target_coordinates_contained_on_reverse_strand_but_query_not(self):
-        # aaaaaaaaa
-        #      bbb
-
-        m1 = self.makeM(1, 10, 60, 31)
-        m2 = self.makeM(6, 11, 59, 43)
-
-        with self.assertRaisesRegex(NonlinearMatchException, "DNA matches contain each other"):
-            pairs = order_matches_for_junctions([m1, m2])
-
-    def test_order_throws_error_on_contained_match(self):
-        # aaaaaaaaa
-        #      bbbbbbbbbbb
-        #            ccc
-        #                ddd
-
-        m1 = self.makeM(1, 10, 1, 30)
-        m2 = self.makeM(6, 16, 16, 48)
-        m3 = self.makeM(12, 14, 34, 42)
-        m4 = self.makeM(16, 18, 46, 54)
-
-        with self.assertRaisesRegex(NonlinearMatchException, "Matching queries contain each other"):
-            pairs = order_matches_for_junctions([m1, m4, m3, m2])  # input not in order
-
-    def test_order_throws_error_if_query_coordinates_do_not_align_with_target_coordinates(self):
-
-        m1 = self.makeM(1, 10, 1, 30)
-        m2 = self.makeM(6, 16, 48, 30)
-
-        with self.assertRaisesRegex(NonlinearMatchException, "Matches are on different strands"):
-            pairs = order_matches_for_junctions([m1, m2])
-
-    def test_order_throws_error_if_query_order_is_not_same_as_target_order(self):
-
-        m1 = self.makeM(1, 10, 31, 60)
-        m2 = self.makeM(6, 16, 1, 30)
-
-        with self.assertRaisesRegex(NonlinearMatchException, "Matching queries contain each other"):
-            pairs = order_matches_for_junctions([m1, m2])
-
-    def test_order_throws_error_if_query_overlap_is_larger_than_left_or_right_sequence(self):
-
-        m1 = self.makeM(6, 16, 1, 10)   # there are deletions of query aa on DNA
-        m2 = self.makeM(10, 20, 15, 40)
-        with self.assertRaisesRegex(NonlinearMatchException, "Overlap larger than matched"):
-            pairs = order_matches_for_junctions([m1, m2])
-
-        m1 = self.makeM(6, 16, 1, 30)
-        m2 = self.makeM(10, 20, 15, 33)  # there are deletions of query aa on DNA
-        with self.assertRaisesRegex(NonlinearMatchException, "Overlap larger than matched"):
-            pairs = order_matches_for_junctions([m1, m2])
+class TestGroupingMatches(TesterBase):
 
     def test_group_matches_separate_matches_by_contig_and_distance(self):
 
@@ -261,25 +245,13 @@ class TestGroupMatches(TesterBase):
 
         matches = [m1, m2, m3, m4, m5, m6, m7, m8, m9]
         random.shuffle(matches)
-        pms = group_matches(matches)
-        pms = sorted(pms, key=lambda p: (p.target_accession, p.query_start))
+        clusters = group_matches(matches)
 
-        self.assertEqual(len(pms), 3)
-        self.assertEqual(pms[0].target_accession, "S1")
-        self.assertEqual(pms[0].query_start, 5)
-        self.assertEqual(pms[0].query_end, 30)
-        self.assertEqual(pms[0].target_start, 1001)
-        self.assertEqual(pms[0].target_end, 1220)
-        self.assertEqual(pms[1].target_accession, "S2")
-        self.assertEqual(pms[1].query_start, 35)
-        self.assertEqual(pms[1].query_end, 60)
-        self.assertEqual(pms[1].target_start, 1301)
-        self.assertEqual(pms[1].target_end, 1520)
-        self.assertEqual(pms[2].target_accession, "S2")
-        self.assertEqual(pms[2].query_start, 65)
-        self.assertEqual(pms[2].query_end, 90)
-        self.assertEqual(pms[2].target_start, 11601)
-        self.assertEqual(pms[2].target_end, 11820)
+        self.assertCountEqual(clusters, [
+            [m1, m2, m3],
+            [m4, m5, m6],
+            [m7, m8, m9]
+        ])
 
     def test_group_matches_separate_matches_on_reverse_strand(self):
 
@@ -292,23 +264,12 @@ class TestGroupMatches(TesterBase):
 
         matches = [m1, m2, m3, m4, m5, m6]
         random.shuffle(matches)
-	# reduce max_overlap_len to really short, so that 25->30 then 15->20
-	# would look like an overlap of the same protein if we didn't handle
-	# reverse strand
-        pms = group_matches(matches, max_overlap_len=4)
-        pms = sorted(pms, key=lambda p: (p.target_accession, p.query_start))
+        clusters = group_matches(matches)
 
-        self.assertEqual(len(pms), 2)
-        self.assertEqual(pms[0].target_accession, "S1")
-        self.assertEqual(pms[0].query_start, 5)
-        self.assertEqual(pms[0].query_end, 30)
-        self.assertEqual(pms[0].target_start, 1220)
-        self.assertEqual(pms[0].target_end, 1001)
-        self.assertEqual(pms[1].target_accession, "S1")
-        self.assertEqual(pms[1].query_start, 35)
-        self.assertEqual(pms[1].query_end, 60)
-        self.assertEqual(pms[1].target_start, 11301)
-        self.assertEqual(pms[1].target_end, 11520)
+        self.assertCountEqual(clusters, [
+            [m3, m2, m1],
+            [m4, m5, m6],
+        ])
 
     def test_group_matches_separate_matches_on_different_strands(self):
         m1 = self.makeM( 5, 18, 1001, 1020, "Q", "S1")
@@ -317,175 +278,22 @@ class TestGroupMatches(TesterBase):
 
         matches = [m1, m2, m3]
         random.shuffle(matches)
-
-        pms = group_matches(matches)
-        pms = sorted(pms, key=lambda p: (p.target_accession, p.query_start))
-        self.assertEqual(len(pms), 1)
-
+        clusters = group_matches(matches)
+        self.assertCountEqual(clusters, [
+            [m1, m2, m3],
+        ])
+        
         m3 = self.makeM(25, 38, 1220, 1201, "Q", "S1")
         matches = [m1, m2, m3]
         random.shuffle(matches)
+        clusters = group_matches(matches)
+        self.assertCountEqual(clusters, [
+            [m1, m2],
+            [m3]
+        ])
 
-        pms = group_matches(matches)
-        pms = sorted(pms, key=lambda p: (p.target_accession, p.query_start))
-        self.assertEqual(len(pms), 2)
 
-        self.assertEqual(pms[0].target_accession, "S1")
-        self.assertEqual(pms[0].query_start, 5)
-        self.assertEqual(pms[0].query_end, 28)
-        self.assertEqual(pms[0].target_start, 1001)
-        self.assertEqual(pms[0].target_end, 1120)
-        self.assertEqual(pms[1].target_accession, "S1")
-        self.assertEqual(pms[1].query_start, 25)
-        self.assertEqual(pms[1].query_end, 38)
-        self.assertEqual(pms[1].target_start, 1220)
-        self.assertEqual(pms[1].target_end, 1201)
-
-    def test_group_matches_separate_overlapped_tandems(self):
-
-        m1 = self.makeM( 5, 18, 1001, 1020, "Q", "S1")
-        m2 = self.makeM(15, 28, 1101, 1120, "Q", "S1")
-        m3 = self.makeM(25, 38, 1201, 1220, "Q", "S1")
-        m4 = self.makeM(34, 48, 1301, 1520, "Q", "S1")
-
-        matches = [m1, m2, m3, m4]
-        random.shuffle(matches)
-
-	# use max_overlap_len to control what is a tandem vs normal overlapping
-	# matches to query, here we are saying if overlap is more than
-	# specified, it's not an overlap. so the first 3 have overlap of 4
-	# between them, but the next one has larger overlap
-        pms = group_matches(matches, max_overlap_len=4)
-        pms = sorted(pms, key=lambda p: (p.target_accession, p.query_start))
-
-        self.assertEqual(len(pms), 2)
-        self.assertEqual(pms[0].target_accession, "S1")
-        self.assertEqual(pms[0].query_start, 5)
-        self.assertEqual(pms[0].query_end, 38)
-        self.assertEqual(pms[0].target_start, 1001)
-        self.assertEqual(pms[0].target_end, 1220)
-        self.assertEqual(pms[1].target_accession, "S1")
-        self.assertEqual(pms[1].query_start, 34)
-        self.assertEqual(pms[1].query_end, 48)
-        self.assertEqual(pms[1].target_start, 1301)
-        self.assertEqual(pms[1].target_end, 1520)
-
-    def test_group_matches_separate_complete_repeat_even_if_smaller_than_overlap_threshold(self):
-
-        m1 = self.makeM( 5, 18, 1001, 1020, "Q", "S1")
-        m2 = self.makeM(15, 28, 1101, 1120, "Q", "S1")
-        m3 = self.makeM(25, 38, 1201, 1220, "Q", "S1")
-        m4 = self.makeM(25, 48, 1301, 1520, "Q", "S1")
-
-        matches = [m1, m2, m3, m4]
-        random.shuffle(matches)
-
-	# overlap between m4 and m3 is smaller than max_overlap_len, but this
-	# is a complete repeat, so separate them
-        pms = group_matches(matches, max_overlap_len=100)
-        pms = sorted(pms, key=lambda p: (p.target_accession, p.query_start))
-
-        self.assertEqual(len(pms), 2)
-        self.assertEqual(pms[0].target_accession, "S1")
-        self.assertEqual(pms[0].query_start, 5)
-        self.assertEqual(pms[0].query_end, 38)
-        self.assertEqual(pms[0].target_start, 1001)
-        self.assertEqual(pms[0].target_end, 1220)
-        self.assertEqual(pms[1].target_accession, "S1")
-        self.assertEqual(pms[1].query_start, 25)
-        self.assertEqual(pms[1].query_end, 48)
-        self.assertEqual(pms[1].target_start, 1301)
-        self.assertEqual(pms[1].target_end, 1520)
-
-    def test_group_matches_will_not_separate_complete_repeat_if_overlap_on_target(self):
-
-        m1 = self.makeM( 5, 18, 1001, 1020, "Q", "S1")
-        m2 = self.makeM(15, 28, 1101, 1120, "Q", "S1")
-        m3 = self.makeM(25, 38, 1201, 1220, "Q", "S1")
-        m4 = self.makeM(25, 48, 1310, 1520, "Q", "S1")
-
-        matches = [m1, m2, m3, m4]
-        random.shuffle(matches)
-        pms = group_matches(matches, max_overlap_len=100)
-        self.assertEqual(len(pms), 2)
-
-        m4 = self.makeM(25, 48, 1210, 1520, "Q", "S1")
-        matches = [m1, m2, m3, m4]
-        random.shuffle(matches)
-        pms = group_matches(matches, max_overlap_len=100)
-        self.assertEqual(len(pms), 1)
-
-    def test_group_matches_separate_overlapping_tandems_on_reverse_strand(self):
-
-        m1 = self.makeM(34, 48, 1101, 1020, "Q", "S1")
-        m2 = self.makeM(25, 38, 1201, 1120, "Q", "S1")
-        m3 = self.makeM(15, 28, 1301, 1220, "Q", "S1")
-        m4 = self.makeM( 5, 18, 1601, 1520, "Q", "S1")
-
-        matches = [m1, m2, m3, m4]
-        random.shuffle(matches)
-
-	# use max_overlap_len to control what is a tandem vs normal overlapping
-	# matches to query, here we are saying if overlap is more than
-	# specified, it's not an overlap. so the first 3 have overlap of 4
-	# between them, but the next one has larger overlap
-        pms = group_matches(matches, max_overlap_len=4)
-        pms = sorted(pms, key=lambda p: (p.target_accession, p.query_start))
-
-        self.assertEqual(len(pms), 2)
-        self.assertEqual(pms[0].target_accession, "S1")
-        self.assertEqual(pms[0].query_start, 5)
-        self.assertEqual(pms[0].query_end, 38)
-        self.assertEqual(pms[0].target_start, 1601)
-        self.assertEqual(pms[0].target_end, 1120)
-        self.assertEqual(pms[1].target_accession, "S1")
-        self.assertEqual(pms[1].query_start, 34)
-        self.assertEqual(pms[1].query_end, 48)
-        self.assertEqual(pms[1].target_start, 1101)
-        self.assertEqual(pms[1].target_end, 1020)
-
-    def test_group_matches_separate_complete_repeat_even_if_smaller_than_overlap_threshold_on_reverse_strand(self):
-
-        m1 = self.makeM(25, 48, 1101, 1020, "Q", "S1")
-        m2 = self.makeM(25, 38, 1201, 1120, "Q", "S1")
-        m3 = self.makeM(15, 28, 1301, 1220, "Q", "S1")
-        m4 = self.makeM( 5, 18, 1601, 1520, "Q", "S1")
-
-        matches = [m1, m2, m3, m4]
-        random.shuffle(matches)
-
-        pms = group_matches(matches, max_overlap_len=100)
-        pms = sorted(pms, key=lambda p: (p.target_accession, p.query_start))
-
-        self.assertEqual(len(pms), 2)
-        self.assertEqual(pms[0].target_accession, "S1")
-        self.assertEqual(pms[0].query_start, 5)
-        self.assertEqual(pms[0].query_end, 38)
-        self.assertEqual(pms[0].target_start, 1601)
-        self.assertEqual(pms[0].target_end, 1120)
-        self.assertEqual(pms[1].target_accession, "S1")
-        self.assertEqual(pms[1].query_start, 25)
-        self.assertEqual(pms[1].query_end, 48)
-        self.assertEqual(pms[1].target_start, 1101)
-        self.assertEqual(pms[1].target_end, 1020)
-
-    def test_group_matches_will_not_separate_complete_repeat_if_overlap_on_target_on_reverse_strand(self):
-
-        m1 = self.makeM(25, 48, 1101, 1020, "Q", "S1")
-        m2 = self.makeM(25, 38, 1201, 1120, "Q", "S1")
-        m3 = self.makeM(15, 28, 1301, 1220, "Q", "S1")
-        m4 = self.makeM( 5, 18, 1601, 1520, "Q", "S1")
-
-        matches = [m1, m2, m3, m4]
-        random.shuffle(matches)
-        pms = group_matches(matches, max_overlap_len=4)
-        self.assertEqual(len(pms), 2)
-
-        m1 = self.makeM(25, 48, 1121, 1020, "Q", "S1")
-        matches = [m1, m2, m3, m4]
-        random.shuffle(matches)
-        pms = group_matches(matches, max_overlap_len=4)
-        self.assertEqual(len(pms), 1)
+class TestProteinHitClass(TesterBase):
 
     def test_protein_hit_id_deterministic_and_changes_when_inputs_change(self):
         # Two identical ProteinHit objects should have the same ID
