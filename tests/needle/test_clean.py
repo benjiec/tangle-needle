@@ -1,6 +1,6 @@
 import unittest
 
-from needle.match import order_matches_for_junctions
+from needle.match import ordered_pairs
 from needle.clean import (
     generate_transition_candidates,
     score_and_select_best_transition,
@@ -145,7 +145,7 @@ class TestCleaningSequenceWithHMM(unittest.TestCase):
         right = self.makeM(4, 8, 10, 24)
         aa_map = {id(left):"ABCDE", id(right):"DEFGH"}
 
-        pairs = order_matches_for_junctions([left, right])  # type: ignore
+        pairs = ordered_pairs([left, right])  # type: ignore
         self.assertEqual(pairs[0][2], 2)
         cand = Candidate(assigned_overlap_to_left=1, window_seq="", stitched="ABCDEFGH", left_trimmed=2, right_kept="DEFGH")
         stitched = stitch_cleaned_sequence([(left, right, None, None)], {0: cand}, aa_map)  # type: ignore
@@ -157,7 +157,7 @@ class TestCleaningSequenceWithHMM(unittest.TestCase):
         c = self.makeM(13, 15, 37, 45)
         aa_map = {id(a):"ABCDE", id(b):"DEFGHI", id(c):"KLM"}
 
-        pairs = order_matches_for_junctions([a,b,c])  # type: ignore
+        pairs = ordered_pairs([a,b,c])  # type: ignore
         cand0 = Candidate(assigned_overlap_to_left=1, window_seq="", stitched="ABCDEFGHI", left_trimmed=1, right_kept="EFGHI")
         cand1 = Candidate(assigned_overlap_to_left=None, window_seq="", stitched="DEFGHIXXXKLM", left_trimmed=0, right_kept="XXXKLM")
         stitched = stitch_cleaned_sequence(
@@ -166,9 +166,9 @@ class TestCleaningSequenceWithHMM(unittest.TestCase):
         self.assertEqual(stitched, "ABCDEFGHIXXXKLM")
 
     def test_hmm_cleaned_protein_integration_with_mock_scoring(self):
-        a = Match("Q","T",1,3,1,9,0.0,100.0,False); a.target_sequence="ATGGAATTT"    # MEF
-        b = Match("Q","T",3,5,10,18,0.0,100.0,False); b.target_sequence="GAAGTGGGG"  # EVG
-        c = Match("Q","T",9,9,30,32,0.0,100.0,False); c.target_sequence="ATG"        # M
+        a = Match("Q","T",1,3,1,9,0.0,False,target_sequence="ATGGAATTT")    # MEF
+        b = Match("Q","T",3,5,10,18,0.0,False,target_sequence="GAAGTGGGG")  # EVG
+        c = Match("Q","T",9,9,30,32,0.0,False,target_sequence="ATG")        # M
         pm = ProteinHit([a,b,c],1,9,1,32)
 
         orig = clean_mod.score_and_select_best_transition
@@ -188,9 +188,9 @@ class TestCleaningSequenceWithHMM(unittest.TestCase):
     def test_hmm_clean_protein_adjusts_overlap_coordinates(self):
         # Overlap: a(1..5), b(4..9) => overlap 2; choose k=1; c(13..15) should shift by 1
 
-        a = Match("Q","T",1,5,1,15,0.0,100.0,False); a.target_sequence="ATG"*5         # 'M'*5
-        b = Match("Q","T",4,9,16,33,0.0,100.0,False); b.target_sequence="GAA"*6        # 'E'*6
-        c = Match("Q","T",13,17,40,51,0.0,100.0,False); c.target_sequence="ATG"*5      # 'M'*5
+        a = Match("Q","T",1,5,1,15,0.0,False,target_sequence="ATG"*5)         # 'M'*5
+        b = Match("Q","T",4,9,16,33,0.0,False,target_sequence="GAA"*6)        # 'E'*6
+        c = Match("Q","T",13,17,40,51,0.0,False,target_sequence="ATG"*5)      # 'M'*5
         pm = ProteinHit([a,b,c],1,15,1,51)
 
         orig = clean_mod.score_and_select_best_transition
@@ -219,8 +219,8 @@ class TestCleaningSequenceWithHMM(unittest.TestCase):
 
     def test_adjust_target_coordinates_gap_keeps_blocks(self):
         # query acc, target acc, query start, query end, target start, target end
-        left = Match("q","t",1,5,100,114,0.0,100.0,False); left.target_sequence="A"*15
-        right = Match("q","t",8,12,200,214,0.0,100.0,False); right.target_sequence="C"*15
+        left = Match("q","t",1,5,100,114,0.0,False,target_sequence="A"*15)
+        right = Match("q","t",8,12,200,214,0.0,False,target_sequence="C"*15)
         cand = Candidate(assigned_overlap_to_left=None, window_seq="", stitched="", left_trimmed=None, right_kept="")
         new_left, new_right = adjust_target_coordinates(left, right, cand)
         self.assertEqual((new_left.query_start, new_left.query_end), (1,5))
@@ -230,8 +230,8 @@ class TestCleaningSequenceWithHMM(unittest.TestCase):
 
     def test_adjust_target_coordinates_overlap_k0_no_change(self):
         # query acc, target acc, query start, query end, target start, target end
-        left = Match("q","t",1,5,100,114,0.0,100.0,False); left.target_sequence="A"*15
-        right = Match("q","t",5,9,200,214,0.0,100.0,False); right.target_sequence="C"*15
+        left = Match("q","t",1,5,100,114,0.0,False,target_sequence="A"*15)
+        right = Match("q","t",5,9,200,214,0.0,False,target_sequence="C"*15)
         cand = Candidate(assigned_overlap_to_left=0, window_seq="", stitched="", left_trimmed=1, right_kept="")
         new_left, new_right = adjust_target_coordinates(left, right, cand)
         self.assertEqual((new_left.query_start, new_left.query_end), (1,4))
@@ -241,8 +241,8 @@ class TestCleaningSequenceWithHMM(unittest.TestCase):
 
     def test_adjust_target_coordinates_overlap_k1_trims_and_adjacent(self):
         # query acc, target acc, query start, query end, target start, target end
-        left = Match("q","t",1,5,100,114,0.0,100.0,False); left.target_sequence="A"*15
-        right = Match("q","t",4,9,200,217,0.0,100.0,False); right.target_sequence="C"*18
+        left = Match("q","t",1,5,100,114,0.0,False,target_sequence="A"*15)
+        right = Match("q","t",4,9,200,217,0.0,False,target_sequence="C"*18)
         cand = Candidate(assigned_overlap_to_left=1, window_seq="", stitched="", left_trimmed=1, right_kept="")
         new_left, new_right = adjust_target_coordinates(left, right, cand)
         self.assertEqual((new_left.query_start, new_left.query_end), (1,4))
@@ -252,8 +252,8 @@ class TestCleaningSequenceWithHMM(unittest.TestCase):
 
     def test_adjust_target_coordinates_overlap_trim_all_from_left(self):
         # query acc, target acc, query start, query end, target start, target end
-        left = Match("q","t",1,1,100,102,0.0,100.0,False); left.target_sequence="A"*3
-        right = Match("q","t",1,4,200,211,0.0,100.0,False); right.target_sequence="C"*12
+        left = Match("q","t",1,1,100,102,0.0,False,target_sequence="A"*3)
+        right = Match("q","t",1,4,200,211,0.0,False,target_sequence="C"*12)
         cand = Candidate(assigned_overlap_to_left=0, window_seq="", stitched="", left_trimmed=1, right_kept="")
         new_left, new_right = adjust_target_coordinates(left, right, cand)
         self.assertEqual((new_left.query_start, new_left.query_end), (1,0))

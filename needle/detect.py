@@ -101,7 +101,7 @@ class Results:
                 if not row or all(not cell for cell in row):
                     continue
                 match = self._row_to_match(row, header_index)
-                # Attach sequences if requested and available
+                # attach sequences if requested and available
                 if match is not None:
                     if self._target_sequences_by_accession is not None:
                         seq = extract_subsequence_strand_sensitive(
@@ -109,7 +109,7 @@ class Results:
                             match.target_start,
                             match.target_end,
                         )
-                        match.target_sequence = seq
+                        match = match.clone(target_sequence = seq)
                     matches.append(match)
 
             self._matches = matches

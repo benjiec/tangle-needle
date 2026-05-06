@@ -47,6 +47,20 @@ class Match:  # does not support matches across circular boundary
         dna = dna[:usable_len]
         return str(Seq(dna).translate(table="Standard", to_stop=False))
 
+    def clone(self, query_start = None, query_end = None, target_start = None, target_end = None, target_sequence = None):
+        return Match(
+            query_accession=self.query_accession,
+            target_accession=self.target_accession,
+            query_start=self.query_start if query_start is None else query_start,
+            query_end=self.query_end if query_end is None else query_end,
+            target_start=self.target_start if target_start is None else target_start,
+            target_end=self.target_end if target_end is None else target_end,
+            e_value=self.e_value,
+            matched_sequence=self.matched_sequence,
+            target_sequence=self.target_sequence if target_sequence is None else target_sequence,
+            score=self.score
+        )
+
     def __str__(self):
         return f"{self.query_accession}/{self.query_start}-{self.query_end} on {self.target_accession}/{self.target_start}-{self.target_end}"
 

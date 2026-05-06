@@ -10,7 +10,7 @@ from needle.hits import write_fasta_record, export_protein_hits
 class TestExport(unittest.TestCase):
 
     def test_write_fasta_record(self):
-        a = Match("QX","TX",1,3,1,9,0.0,100.0,False); a.target_sequence="ATGGAATTT"
+        a = Match("QX","TX",1,3,1,9,0.0,False,target_sequence="ATGGAATTT")
         pm = ProteinHit([a],1,3,1,9)
         pid = pm.protein_hit_id
         buf = io.StringIO()
@@ -21,11 +21,11 @@ class TestExport(unittest.TestCase):
 
     def test_export_protein_hits_filters_and_writes(self):
         # pm1: single block => eligible
-        a = Match("Q1","T1",1,3,1,9,0.0,100.0,False); a.target_sequence="ATGGAATTT"
+        a = Match("Q1","T1",1,3,1,9,0.0,False,target_sequence="ATGGAATTT")
         pm1 = ProteinHit([a],1,3,1,9, hmm_file="ignored.hmm")
         # pm2: overlapping blocks => not single sequence
-        b1 = Match("Q2","T2",1,3,1,9,0.0,100.0,False); b1.target_sequence="ATGGAATTT"
-        b2 = Match("Q2","T2",3,5,10,18,0.0,100.0,False); b2.target_sequence="GAAGTGGGG"
+        b1 = Match("Q2","T2",1,3,1,9,0.0,False,target_sequence="ATGGAATTT")
+        b2 = Match("Q2","T2",3,5,10,18,0.0,False,target_sequence="GAAGTGGGG")
         pm2 = ProteinHit([b1,b2],1,5,1,18, hmm_file="ignored.hmm")
         with tempfile.TemporaryDirectory() as d:
             p1 = os.path.join(d, "prot.faa")
@@ -41,7 +41,7 @@ class TestExport(unittest.TestCase):
             self.assertEqual(len(lines2), 2)
 
     def test_export_protein_hits_appends_not_overwrites(self):
-        a = Match("QX","TX",1,3,1,9,0.0,100.0,False); a.target_sequence="ATGGAATTT"
+        a = Match("QX","TX",1,3,1,9,0.0,False,target_sequence="ATGGAATTT")
         pm = ProteinHit([a],1,3,1,9, hmm_file="ignored.hmm")
         with tempfile.TemporaryDirectory() as d:
             p1 = os.path.join(d, "prot.faa")

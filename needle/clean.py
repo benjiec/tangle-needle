@@ -2,7 +2,7 @@ import os
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
-from .match import Match, ProteinHit, order_matches_for_junctions, NonlinearMatchException
+from .match import Match, ProteinHit, ordered_pairs, NonlinearMatchException
 from .detect import DOM_EVALUE_LIMIT
 from .hmm import hmmsearch, HMMCollection
 
@@ -132,21 +132,6 @@ def stitch_cleaned_sequence(
     return result
 
 
-def _clone(m: Match) -> Match:
-    return Match(
-        query_accession=m.query_accession,
-        target_accession=m.target_accession,
-        query_start=m.query_start,
-        query_end=m.query_end,
-        target_start=m.target_start,
-        target_end=m.target_end,
-        e_value=m.e_value,
-        matched_sequence=m.matched_sequence,
-        target_sequence=m.target_sequence,
-        score=m.score
-    )
-
-
 def _trim_dna_front(dna: Optional[str], aa_count: int) -> Optional[str]:
     if dna is None or aa_count <= 0:
         return dna
@@ -166,23 +151,21 @@ def _trim_dna_back(dna: Optional[str], aa_count: int) -> Optional[str]:
 
 
 def adjust_target_coordinates(left: Match, right: Match, cand: Candidate) -> Tuple[Match, Match]:
-    nl = _clone(left)
-    nr = _clone(right)
 
-    # Gap: leave as-is
+    # gap: leave as-is
     if cand.assigned_overlap_to_left is None:
-        return nl, nr
+        return left.clone(), right.clone()
 
-    nl.query_end -= cand.left_trimmed
-    nl.target_end -= 3 * cand.left_trimmed
-    nl.target_sequence = _trim_dna_back(nl.target_sequence, cand.left_trimmed)
+    new_left_query_end = left.query_end - cand.left_trimmed
+    new_left_target_end = left.target_end - 3 * cand.left_trimmed
+    new_left_target_sequence = _trim_dna_back(left.target_sequence, cand.left_trimmed)
 
-    nr.query_start += cand.assigned_overlap_to_left
-    nr.target_start += 3 * cand.assigned_overlap_to_left
-    nr.target_sequence = _trim_dna_front(nr.target_sequence, cand.assigned_overlap_to_left)
+    new_right_query_start = right.query_start + cand.assigned_overlap_to_left
+    new_right_target_start = right.target_start + 3 * cand.assigned_overlap_to_left
+    new_right_target_sequence = _trim_dna_front(right.target_sequence, cand.assigned_overlap_to_left)
 
-    # print("adjusting target coordinates, left", -cand.left_trimmed, "right", cand.assigned_overlap_to_left)
-    # print("now left", nl.query_start, nl.query_end, "right", nr.query_start, nr.query_end)
+    nl = left.clone(query_end=new_left_query_end, target_end=new_left_target_end, target_sequence=new_left_target_sequence)
+    nr = right.clone(query_start=new_right_query_start, target_start=new_right_target_start, target_sequence=new_right_target_sequence)
 
     return nl, nr
 
@@ -231,7 +214,7 @@ def hmm_clean_protein(
     # Compute AA per match and junction candidates
     aa_map = aa_by_match(old_matches)
     try:
-        pairs = order_matches_for_junctions(old_matches)
+        pairs = ordered_pairs(old_matches)
     except NonlinearMatchException as e:
         print("Cannot order existing detected matches, revert")
         print(protein_hit.collated_protein_sequence)
