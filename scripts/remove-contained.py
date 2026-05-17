@@ -2,9 +2,7 @@
 #
 
 """
-needle-py needle/scripts/remove-contained.py \
-  --forget-original \
-  `tangle-py tangle/scripts/defaults.py -m area_genomics_dir`/*
+needle-py needle/scripts/remove-contained.py --forget-original `tangle-py tangle/scripts/defaults.py -m area_genomics_dir`/*
 """
 
 import shutil

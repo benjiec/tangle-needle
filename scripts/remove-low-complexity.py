@@ -2,9 +2,7 @@
 #
 
 """
-needle-py needle/scripts/remove-low-complexity.py \
-   --forget-original \
-   `tangle-py tangle/scripts/defaults.py -m area_genomics_dir`/*
+needle-py needle/scripts/remove-low-complexity.py --forget-original `tangle-py tangle/scripts/defaults.py -m area_genomics_dir`/*
 """
 
 import shutil
@@ -39,6 +37,7 @@ if __name__ == "__main__":
         tsv_fn = str(genome_dir_path / args.demuxed_tsv_filename)
         faa_fn = str(genome_dir_path / args.demuxed_fasta_filename)
 
+        print(genome_dir, tsv_fn)
         source = CSVSource(DetectedTable, tsv_fn)
         rows = source.values()
         protein_sequences = read_fasta_as_dict(faa_fn)
