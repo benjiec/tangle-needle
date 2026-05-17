@@ -1,4 +1,4 @@
-from .sequence import extract_subsequence_strand_sensitive
+from .sequence import extract_subsequence_strand_sensitive, is_aa_sequence_low_complexity
 from .match import Match, ProteinHit, build_graph, graph_paths
 from .detect import hmm_search_genome
 
@@ -64,7 +64,7 @@ def hmm_expand_protein(matches, genomic_sequence_dict, hmm_file, threshold = Non
     target_left = max(min(start, end) - max_search_distance, 1)
     target_right = min(max(start, end) + max_search_distance, len(target_full_sequence))
 
-    if VERBOSE_EXPAND > 1:
+    if VERBOSE_EXPAND > 0:
         print(f"{query_accession} on {target_accession}, {target_left}-{target_right} (based on {start}-{end}), strand {strand}, contig {len(target_full_sequence)}")
         for i, match in enumerate(matches):
             print(f"  old {match}")
@@ -74,15 +74,30 @@ def hmm_expand_protein(matches, genomic_sequence_dict, hmm_file, threshold = Non
         cpus = cpus,
         hmm_rows = hmm_rows
     )
+    if VERBOSE_EXPAND > 0:
+        if new_matches is None:
+            print(f"  no new matches found")
+        else:
+            print(f"  found {len(new_matches)} new matches")
 
     if new_matches is None:
+        return []
+
+    # at least 50% of the matches need to be high complexity, otherwise it's a
+    # waste of time!
+
+    complexity_score = sum([0 if is_aa_sequence_low_complexity(m.target_sequence_translated()) else 1 for m in new_matches])
+    if complexity_score*2 < len(new_matches):
+        if VERBOSE_EXPAND > 0:
+            print(f"  too many matches are low complexity, ignore")
         return []
 
     reasons = []
     graph = build_graph(new_matches, reasons)
     paths = graph_paths(graph)
-    if VERBOSE_EXPAND > 1:
+    if VERBOSE_EXPAND > 0:
         print(f"  graph produced {len(paths)} paths")
+    if VERBOSE_EXPAND > 1:
         for reason in reasons:
             print(f"    {reason.reason}")
     proteins = []
@@ -113,6 +128,16 @@ def hmm_expand_protein(matches, genomic_sequence_dict, hmm_file, threshold = Non
     return proteins
 
 
+def is_protein_low_complexity(p):
+    # we can't just use p.collated_protein_sequence because we have not yet
+    # cleaned up junctions yet
+
+    match_sequences = [m.target_sequence_translated() for m in p.matches]
+    combined_match_sequence = "".join(match_sequences)
+
+    return is_aa_sequence_low_complexity(combined_match_sequence)
+
+
 def hmm_expand(clusters, genomic_sequence_dict, hmm_collection, thresholds = None, cpus = None):
     new_protein_hits = {}
 
@@ -131,6 +156,10 @@ def hmm_expand(clusters, genomic_sequence_dict, hmm_collection, thresholds = Non
                 if VERBOSE_EXPAND > 1:
                     print("using", threshold, "as threshold for", cluster_query_accession)
             proteins = hmm_expand_protein(cluster, genomic_sequence_dict, hmm_profile, threshold = threshold, cpus = cpus)
+            proteins = [p for p in proteins if not is_protein_low_complexity(p)]
+
+            if VERBOSE_EXPAND > 0:
+                print(f"  adding {len(proteins)} potential proteins")
             for protein in proteins:
                 if VERBOSE_EXPAND > 1:
                     print(f"  adding protein {protein.protein_hit_id}")

@@ -2,6 +2,14 @@ from typing import Dict, List, Optional, Tuple
 from Bio.Seq import Seq
 
 
+def uniq_aa(s):
+    lookup = {c:1 for c in s}
+    return len(lookup.keys())
+
+def is_aa_sequence_low_complexity(s):
+    return uniq_aa(s) <= 8
+
+
 def extract_subsequence(full_sequence: Optional[str], start_1_based: int, end_1_based: int) -> Optional[str]:
     if full_sequence is None:
         return None

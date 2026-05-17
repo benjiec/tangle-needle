@@ -8,6 +8,7 @@ needle-py needle/scripts/remove-low-complexity.py --forget-original `tangle-py t
 import shutil
 import itertools
 from pathlib import Path
+from needle.sequence import is_aa_sequence_low_complexity
 
 
 def uniq_aa(v):
@@ -16,7 +17,7 @@ def uniq_aa(v):
 
 
 def filter_low_complexity(data_dict):
-    return {k:v for k,v in data_dict.items() if uniq_aa(v) > 8}
+    return {k:v for k,v in data_dict.items() if not is_aa_sequence_low_complexity(v)}
 
 
 if __name__ == "__main__":
