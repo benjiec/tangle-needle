@@ -66,3 +66,7 @@ python3 gcloud/hmm-detect/setup.py \
   --run-dir=runs \
   ncbi-downloads/ncbi_dataset/data/GCF_002042975.1/GCF_002042975.1_ofav_dov_v1_genomic.fna
 ```
+
+There are some scripts in `scripts/` to filter away bad results, if you ran a
+version of the tool that didn't automatically filter them. Read the code to see
+what they do.
