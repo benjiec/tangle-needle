@@ -1,9 +1,11 @@
 # remove sequences with very low complexity
 #
-# needle-py needle/scripts/remove-low-complexity.py \
-#   --forget-original \
-#   `tangle-py tangle/scripts/defaults.py -m area_genomics_dir`/*
 
+"""
+needle-py needle/scripts/remove-low-complexity.py \
+   --forget-original \
+   `tangle-py tangle/scripts/defaults.py -m area_genomics_dir`/*
+"""
 
 import shutil
 import itertools
