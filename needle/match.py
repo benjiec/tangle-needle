@@ -59,7 +59,7 @@ class Match:  # does not support matches across circular boundary
         )
 
     def __str__(self):
-        return f"{self.query_accession}/{self.query_start}-{self.query_end} on {self.target_accession}/{self.target_start}-{self.target_end}"
+        return f"{self.query_accession}/{self.query_start}-{self.query_end} on {self.target_accession}/{self.target_start}-{self.target_end} {self.score} {self.e_value}"
 
 
 class NonlinearMatchException(Exception):

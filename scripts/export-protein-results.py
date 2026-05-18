@@ -36,7 +36,7 @@ def main():
     parser.add_argument("--append", action="store_true", default=False)
     parser.add_argument("--cpus", type=int, default=None)
     parser.add_argument("--threshold-file")
-    parser.add_argument("--threshold-frac", default=0.8, type=float)
+    parser.add_argument("--threshold-frac", default=0.7, type=float)
     args = parser.parse_args()
 
     res = Results(args.hmm_search_results_tsv, target_fasta_path=args.fna_file)
