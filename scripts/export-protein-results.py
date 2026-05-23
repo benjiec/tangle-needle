@@ -20,7 +20,7 @@ def build_thresholds_dict(thresholds_file, threshold_frac):
     for row in values:
         t = row["threshold"]
         if t < 0:
-           t = row["alen"]
+           t = row["mlen"]
         thresholds[row["model"]] = threshold_frac*t
     return thresholds
 
