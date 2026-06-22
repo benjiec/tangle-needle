@@ -12,15 +12,37 @@
         "maxRetryCount": 5,
         "runnables": [
           {
-            "displayName": "General Prep",
+            "displayName": "Create Data Directory",
             "script": {
-              "text": "gsutil cp ${GC_RUN_DIR}/prep-general.sh ./prep-general.sh && bash ./prep-general.sh"
+              "text": "mkdir -p /data && chmod 777 /data"
+            }
+          },
+          {
+            "displayName": "General Prep",
+            "container": {
+              "imageUri": "gcr.io/google.com/cloudsdktool/google-cloud-cli:slim",
+              "volumes": [
+                "/data:/data" 
+              ],
+              "commands": [
+                "bash",
+                "-c",
+                "gsutil cp ${GC_RUN_DIR}/prep-general.sh ./prep-general.sh && bash ./prep-general.sh"
+              ]
             }
           },
           {
             "displayName": "Task Specific Prep",
-            "script": {
-              "text": "gsutil cp ${GC_RUN_DIR}/prep-task.sh ./prep-task_${BATCH_TASK_INDEX}.sh && bash ./prep-task_${BATCH_TASK_INDEX}.sh"
+            "container": {
+              "imageUri": "gcr.io/google.com/cloudsdktool/google-cloud-cli:slim",
+              "volumes": [
+                "/data:/data" 
+              ],
+              "commands": [
+                "bash",
+                "-c",
+                "gsutil cp ${GC_RUN_DIR}/prep-task.sh ./prep-task_${BATCH_TASK_INDEX}.sh && bash ./prep-task_${BATCH_TASK_INDEX}.sh"
+              ]
             }
           },
           {
@@ -63,8 +85,16 @@
           },
           {
             "displayName": "Upload Results",
-            "script": {
-              "text": "ls -l /data/ && gsutil cp /data/output_${BATCH_TASK_INDEX}.* ${GC_RUN_OUTPUT_DIR}/"
+            "container": {
+              "imageUri": "gcr.io/google.com/cloudsdktool/google-cloud-cli:slim",
+              "volumes": [
+                "/data:/data" 
+              ],
+              "commands": [
+                "bash",
+                "-c",
+                "ls -l /data/ && gsutil cp /data/output_${BATCH_TASK_INDEX}.* ${GC_RUN_OUTPUT_DIR}/"
+              ]
             }
           }
         ]
