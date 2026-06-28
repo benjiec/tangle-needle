@@ -4,9 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "needle"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
-  "heap @ git+https://github.com/benjiec/tangle-heap.git@7f3d8c2",
+  "heap @ git+https://github.com/benjiec/tangle-heap.git@1f7c7d9",
   "tangle @ git+https://github.com/benjiec/tangle.git@1f7c7d9",
   "biopython>=1.81",
   "gffutils>=0.14",
