@@ -7,7 +7,7 @@ name = "needle"
 version = "0.1.3"
 dependencies = [
   "heap @ git+https://github.com/benjiec/tangle-heap.git@34736e7",
-  "tangle @ git+https://github.com/benjiec/tangle.git@b7d17e6",
+  "tangle @ git+https://github.com/benjiec/tangle.git@3b8c07f",
   "biopython>=1.81",
   "gffutils>=0.14",
   "bcbio-gff>=0.6.9",
