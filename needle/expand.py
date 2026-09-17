@@ -15,7 +15,7 @@ def find_more_matches_at_locus(query_accession, hmm_file, target_full_sequence, 
             strand = strand,
             min_aa_length = MIN_AA_LENGTH,
             cpus = cpus,
-            filter_by_evalue_cond = True  # we already assume there's a protein here...
+            filter_by_evalue_cond = True  # crucial for low complexity regions; we already assume there's a protein here...
         )
 
     if not hmm_rows:
